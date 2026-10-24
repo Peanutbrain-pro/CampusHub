@@ -1,5 +1,24 @@
+
 /**
  * @file index.ts
- * @description Service entry point for Daily Quiz feature.
+ * @description Selects the appropriate Daily Quiz service.
  * @owner Daily Quiz Team
  */
+
+import type { DailyQuizService } from "./types";
+import { mockDailyQuizService } from "./mockService";
+import { realDailyQuizService } from "./realService";
+
+const useMocks = import.meta.env.VITE_USE_MOCKS !== "false";
+
+export const dailyQuizService: DailyQuizService = useMocks
+  ? mockDailyQuizService
+  : realDailyQuizService;
+
+export type {
+  DailyQuizService,
+  QuizQuestion,
+  QuizSubmissionResult,
+  TodayQuizResponse,
+  UserStreak,
+} from "./types";
