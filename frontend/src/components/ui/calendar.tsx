@@ -92,15 +92,15 @@ function Calendar({
           classNames?.caption_label
         ),
         month_grid: cn("w-full border-collapse", defaultClassNames.month_grid, classNames?.month_grid),
-        weekdays: cn("flex", defaultClassNames.weekdays, classNames?.weekdays),
+        weekdays: cn("flex justify-between w-full mb-1", defaultClassNames.weekdays, classNames?.weekdays),
         weekday: cn(
-          "text-muted-foreground flex-1 select-none rounded-md text-[0.8rem] font-normal",
+          "text-muted-foreground size-8 inline-flex items-center justify-center select-none text-[0.8rem] font-medium",
           defaultClassNames.weekday,
           classNames?.weekday
         ),
-        week: cn("mt-2 flex w-full", defaultClassNames.week, classNames?.week),
+        week: cn("mt-1 flex w-full justify-between", defaultClassNames.week, classNames?.week),
         week_number_header: cn(
-          "w-[--cell-size] select-none",
+          "w-8 select-none",
           defaultClassNames.week_number_header,
           classNames?.week_number_header
         ),
@@ -110,7 +110,7 @@ function Calendar({
           classNames?.week_number
         ),
         day: cn(
-          "group/day relative aspect-square h-full w-full select-none p-0 text-center [&:first-child[data-selected=true]_button]:rounded-l-md [&:last-child[data-selected=true]_button]:rounded-r-md",
+          "relative size-8 p-0 text-center select-none inline-flex items-center justify-center",
           defaultClassNames.day,
           classNames?.day
         ),
@@ -199,27 +199,26 @@ function CalendarDayButton({
     if (modifiers.focused) ref.current?.focus()
   }, [modifiers.focused])
 
+  const { className: _rdpClassName, ...restProps } = props as any
+
   return (
     <Button
       ref={ref}
       variant="ghost"
       size="icon"
       data-day={day.date.toLocaleDateString()}
-      data-selected-single={
-        modifiers.selected &&
-        !modifiers.range_start &&
-        !modifiers.range_end &&
-        !modifiers.range_middle
-      }
-      data-range-start={modifiers.range_start}
-      data-range-end={modifiers.range_end}
-      data-range-middle={modifiers.range_middle}
+      {...restProps}
       className={cn(
-        "data-[selected-single=true]:bg-primary data-[selected-single=true]:text-primary-foreground data-[range-middle=true]:bg-accent data-[range-middle=true]:text-accent-foreground data-[range-start=true]:bg-primary data-[range-start=true]:text-primary-foreground data-[range-end=true]:bg-primary data-[range-end=true]:text-primary-foreground group-data-[focused=true]/day:border-ring group-data-[focused=true]/day:ring-ring/50 flex aspect-square h-auto w-full min-w-[--cell-size] flex-col gap-1 font-normal leading-none data-[range-end=true]:rounded-md data-[range-middle=true]:rounded-none data-[range-start=true]:rounded-md group-data-[focused=true]/day:relative group-data-[focused=true]/day:z-10 group-data-[focused=true]/day:ring-[3px] [&>span]:text-xs [&>span]:opacity-70",
-        defaultClassNames.day,
+        "size-8 p-0 font-normal text-xs rounded-md inline-flex items-center justify-center transition-colors",
+        modifiers.selected
+          ? "bg-primary text-primary-foreground font-semibold hover:bg-primary hover:text-primary-foreground"
+          : modifiers.today
+            ? "border border-primary font-semibold text-primary"
+            : "hover:bg-muted text-foreground",
+        modifiers.outside && "text-muted-foreground/30 pointer-events-none",
+        defaultClassNames.day_button,
         className
       )}
-      {...props}
     />
   )
 }

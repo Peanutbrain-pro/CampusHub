@@ -345,10 +345,9 @@ Every developer owns **one isolated feature directory**. Features must never imp
 ### 2. Dashboard (`features/dashboard`)
 - **Route**: `/`
 - **Overview**:
-  - Grid of enrolled subject cards with quick launch links directly to `/subjects/:subjectId`.
-  - Quick action learning tool cards for Resume Reviewer, Daily Quiz, and Project Analysis.
-  - Interactive mini Calendar widget highlighting upcoming academic deadlines and events.
-  - Recent community discussion highlights with deep links into forum threads.
+  - Minimalist enrolled subject cards with quick launch links directly to `/subjects/:subjectId`.
+  - Clean, interactive mini Calendar widget with centered navigation and properly bounded month switcher.
+  - Recent posts from followed subject communities with direct navigation to discussions.
 
 ### 3. Communities (`features/communities`)
 - **Routes**:
