@@ -1,28 +1,51 @@
 /**
  * @file LoginForm.tsx
- * @description Modern shadcn/ui login & registration form block supporting custom unique handles
- *              and username-based authentication integrated with Supabase and offline mock mode.
+ * @description Modern shadcn/ui login & registration form block supporting custom unique handles,
+ *              tabbed switching, real-time availability checks, and offline mock fallback.
  * @owner Platform Core Team
  */
 
 import React, { useState, useEffect } from "react";
-import { Loader2, Check, AlertCircle } from "lucide-react";
+import { Loader2, Check, AlertCircle, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { authService } from "../services/authService";
 import { useDebounce } from "@/lib/use-debounce";
 import type { UserProfile } from "@/shared/user";
 import { toast } from "sonner";
 
 interface LoginFormProps {
+  mode?: "signin" | "signup";
+  onModeChange?: (mode: "signin" | "signup") => void;
   isMock: boolean;
   onSuccess: (profile: UserProfile) => void;
 }
 
-export const LoginForm: React.FC<LoginFormProps> = ({ isMock, onSuccess }) => {
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+export const LoginForm: React.FC<LoginFormProps> = ({
+  mode: controlledMode,
+  onModeChange,
+  isMock,
+  onSuccess,
+}) => {
+  const [internalMode, setInternalMode] = useState<"signin" | "signup">(controlledMode || "signin");
+
+  // Keep internal state aligned if parent passes down a new mode
+  useEffect(() => {
+    if (controlledMode) {
+      setInternalMode(controlledMode);
+    }
+  }, [controlledMode]);
+
+  const currentMode = controlledMode || internalMode;
+
+  const handleSetMode = (nextMode: "signin" | "signup") => {
+    setInternalMode(nextMode);
+    onModeChange?.(nextMode);
+    setHandleStatus({ available: null });
+  };
 
   // Sign-in identifier (accepts either username or email)
   const [identifier, setIdentifier] = useState("");
@@ -41,13 +64,13 @@ export const LoginForm: React.FC<LoginFormProps> = ({ isMock, onSuccess }) => {
   }>({ available: null });
 
   // Debounced handle for real-time validation & availability check
-  const debouncedHandle = useDebounce(handle.trim(), 350);
+  const debouncedHandle = useDebounce(handle.trim(), 300);
 
   useEffect(() => {
     let isCancelled = false;
 
     async function evaluateHandle() {
-      if (mode !== "signup" || !debouncedHandle) {
+      if (currentMode !== "signup" || !debouncedHandle) {
         setHandleStatus({ available: null });
         setIsCheckingHandle(false);
         return;
@@ -77,12 +100,12 @@ export const LoginForm: React.FC<LoginFormProps> = ({ isMock, onSuccess }) => {
     return () => {
       isCancelled = true;
     };
-  }, [debouncedHandle, mode, isMock]);
+  }, [debouncedHandle, currentMode, isMock]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (mode === "signin") {
+    if (currentMode === "signin") {
       if (!identifier.trim() || !password) {
         toast.error("Please enter your username (or email) and password.");
         return;
@@ -103,7 +126,8 @@ export const LoginForm: React.FC<LoginFormProps> = ({ isMock, onSuccess }) => {
       }
     } else {
       // Sign-up validation
-      if (!handle.trim()) {
+      const cleanHandle = handle.trim().toLowerCase();
+      if (!cleanHandle) {
         toast.error("Please choose a username.");
         return;
       }
@@ -120,13 +144,30 @@ export const LoginForm: React.FC<LoginFormProps> = ({ isMock, onSuccess }) => {
         return;
       }
 
+      // Check handle status
       if (handleStatus.available === false) {
         toast.error(handleStatus.error || "Please choose a valid and available username.");
         return;
       }
 
+      // If check is still pending or wasn't triggered yet
+      if (handleStatus.available === null) {
+        const val = authService.validateHandle(cleanHandle);
+        if (!val.valid) {
+          toast.error(val.error || "Invalid username format.");
+          return;
+        }
+        setIsLoading(true);
+        const check = await authService.checkHandleAvailability(val.cleanHandle, isMock);
+        if (!check.available) {
+          setIsLoading(false);
+          toast.error(check.error || "This username is already taken.");
+          return;
+        }
+      }
+
       setIsLoading(true);
-      const res = await authService.signUp(email, password, fullName, handle, isMock);
+      const res = await authService.signUp(email, password, fullName, cleanHandle, isMock);
       setIsLoading(false);
 
       if (res.error) {
@@ -135,28 +176,56 @@ export const LoginForm: React.FC<LoginFormProps> = ({ isMock, onSuccess }) => {
       }
 
       if (res.data) {
-        toast.success(`Account @${res.data.handle} created successfully!`);
-        onSuccess(res.data);
+        if (res.data.requiresVerification) {
+          toast.info("Account created! Please check your email inbox to verify your account, then sign in.", {
+            duration: 6000,
+          });
+          handleSetMode("signin");
+          setIdentifier(cleanHandle);
+        } else {
+          toast.success(`Account @${res.data.handle} created successfully!`);
+          onSuccess(res.data);
+        }
       }
     }
   };
 
+  const handleQuickFill = (presetEmail: string, presetPass: string) => {
+    setIdentifier(presetEmail);
+    setPassword(presetPass);
+    toast.info(`Filled test credentials for ${presetEmail}`);
+  };
+
   return (
     <Card className="w-full shadow-md">
-      <CardHeader className="space-y-1 text-center">
-        <CardTitle className="text-2xl font-bold tracking-tight">
-          {mode === "signin" ? "Login to your account" : "Create an account"}
-        </CardTitle>
-        <CardDescription className="text-xs text-muted-foreground">
-          {mode === "signin"
-            ? "Enter your username or email and password below"
-            : "Choose a unique username and register for CampusHub"}
-        </CardDescription>
+      <CardHeader className="space-y-3 text-center pb-3">
+        {/* Sign In / Sign Up Tabs */}
+        <Tabs
+          value={currentMode}
+          onValueChange={(val) => handleSetMode(val as "signin" | "signup")}
+          className="w-full"
+        >
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="signin">Sign In</TabsTrigger>
+            <TabsTrigger value="signup">Sign Up</TabsTrigger>
+          </TabsList>
+        </Tabs>
+
+        <div className="space-y-1">
+          <CardTitle className="text-xl font-bold tracking-tight">
+            {currentMode === "signin" ? "Login to your account" : "Create an account"}
+          </CardTitle>
+          <CardDescription className="text-xs text-muted-foreground">
+            {currentMode === "signin"
+              ? "Enter your username or email and password below"
+              : "Choose a unique username and register for CampusHub"}
+          </CardDescription>
+        </div>
       </CardHeader>
 
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
-          {mode === "signup" ? (
+          {currentMode === "signup" ? (
             <>
               {/* Unique Username / Handle Field */}
               <div className="space-y-1.5">
@@ -193,7 +262,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ isMock, onSuccess }) => {
                   autoComplete="username"
                 />
                 <p className="text-[11px] text-muted-foreground">
-                  4–20 characters. Letters, numbers, and underscores only.
+                  4–20 characters. Lowercase letters, numbers, and underscores only.
                 </p>
               </div>
 
@@ -247,7 +316,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ isMock, onSuccess }) => {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label htmlFor="password">Password</Label>
-              {mode === "signin" && (
+              {currentMode === "signin" && (
                 <a
                   href="#forgot"
                   onClick={(e) => {
@@ -263,7 +332,8 @@ export const LoginForm: React.FC<LoginFormProps> = ({ isMock, onSuccess }) => {
             <Input
               id="password"
               type="password"
-              autoComplete={mode === "signin" ? "current-password" : "new-password"}
+              placeholder={currentMode === "signup" ? "At least 6 characters" : undefined}
+              autoComplete={currentMode === "signin" ? "current-password" : "new-password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
@@ -274,32 +344,65 @@ export const LoginForm: React.FC<LoginFormProps> = ({ isMock, onSuccess }) => {
           <Button
             type="submit"
             className="w-full font-medium cursor-pointer"
-            disabled={isLoading || (mode === "signup" && isCheckingHandle)}
+            disabled={isLoading || (currentMode === "signup" && isCheckingHandle)}
           >
             {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {isLoading
-              ? mode === "signin"
+              ? currentMode === "signin"
                 ? "Signing in..."
                 : "Creating account..."
-              : mode === "signin"
+              : currentMode === "signin"
                 ? "Sign In"
-                : "Sign Up"}
+                : "Create Account"}
           </Button>
         </form>
 
+        {/* Quick Mock Role Fill Helper when running offline */}
+        {isMock && currentMode === "signin" && (
+          <div className="mt-4 pt-3 border-t text-center">
+            <div className="flex items-center justify-center gap-1 text-[11px] text-muted-foreground mb-2">
+              <Sparkles className="h-3 w-3 text-amber-500" />
+              <span>Quick Test Logins (Mock Mode):</span>
+            </div>
+            <div className="flex justify-center gap-1.5 flex-wrap">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs px-2"
+                onClick={() => handleQuickFill("student@campushub.edu", "password123")}
+              >
+                Student
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs px-2"
+                onClick={() => handleQuickFill("moderator@campushub.edu", "password123")}
+              >
+                Moderator
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs px-2"
+                onClick={() => handleQuickFill("admin@campushub.edu", "password123")}
+              >
+                Admin
+              </Button>
+            </div>
+          </div>
+        )}
+
         <div className="mt-4 text-center text-xs">
           <span className="text-muted-foreground">
-            {mode === "signin" ? "Don't have an account? " : "Already have an account? "}
+            {currentMode === "signin" ? "Don't have an account? " : "Already have an account? "}
           </span>
           <button
             type="button"
-            onClick={() => {
-              setMode(mode === "signin" ? "signup" : "signin");
-              setHandleStatus({ available: null });
-            }}
+            onClick={() => handleSetMode(currentMode === "signin" ? "signup" : "signin")}
             className="font-medium text-primary hover:underline underline-offset-4 cursor-pointer"
           >
-            {mode === "signin" ? "Sign up" : "Sign in"}
+            {currentMode === "signin" ? "Sign up" : "Sign in"}
           </button>
         </div>
       </CardContent>

@@ -119,7 +119,7 @@ function RootLayoutContent() {
   const { user, logout } = useAuth();
   const { actions, title: customTitle, center } = useHeader();
 
-  const { theme, setTheme, resolvedTheme } = useTheme();
+  const { setTheme, resolvedTheme } = useTheme();
 
   const isDarkMode = resolvedTheme === "dark";
 
@@ -148,7 +148,7 @@ function RootLayoutContent() {
   };
 
   const toggleTheme = () => {
-    setTheme(theme === "dark" ? "light" : "dark");
+    setTheme(isDarkMode ? "light" : "dark");
   };
 
   return (

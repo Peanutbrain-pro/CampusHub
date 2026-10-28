@@ -97,6 +97,16 @@ BEGIN
     v_handle := 'user_' || SUBSTRING(new.id::text FROM 1 FOR 8);
   END IF;
 
+  -- If handle was derived from email without explicit metadata, sanitize it
+  IF new.raw_user_meta_data->>'handle' IS NULL THEN
+    v_handle := REGEXP_REPLACE(v_handle, '[^a-z0-9_]', '_', 'g');
+    IF LENGTH(v_handle) < 4 THEN
+      v_handle := RPAD(v_handle, 4, '0');
+    ELSIF LENGTH(v_handle) > 20 THEN
+      v_handle := SUBSTRING(v_handle FROM 1 FOR 20);
+    END IF;
+  END IF;
+
   -- 1. Database-level length & character format validation
   IF NOT (v_handle ~ '^[a-z0-9_]{4,20}$') THEN
     RAISE EXCEPTION 'Invalid username: must be 4–20 alphanumeric characters or underscores.'

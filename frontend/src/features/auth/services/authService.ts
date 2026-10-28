@@ -278,7 +278,7 @@ export const authService = {
     fullName: string,
     handle: string,
     isMock: boolean
-  ): Promise<Result<UserProfile>> {
+  ): Promise<Result<UserProfile & { requiresVerification?: boolean }>> {
     const cleanEmail = email.trim().toLowerCase();
     const handleValidation = this.validateHandle(handle);
 
@@ -319,7 +319,7 @@ export const authService = {
       });
 
       localStorage.setItem(MOCK_STORAGE_KEY, JSON.stringify(newMockProfile));
-      return { data: newMockProfile, error: null };
+      return { data: { ...newMockProfile, requiresVerification: false }, error: null };
     }
 
     // Live Supabase Sign Up
@@ -336,21 +336,40 @@ export const authService = {
       });
 
       if (error || !data.user) {
+        let msg = error?.message || "Sign up failed";
+        if (msg.toLowerCase().includes("unique") || msg.toLowerCase().includes("handle")) {
+          msg = "This username is already taken. Please choose another username.";
+        }
         return {
           data: null,
-          error: { code: "INTERNAL", message: error?.message || "Sign up failed" },
+          error: { code: "INTERNAL", message: msg },
         };
       }
 
+      // Check if user already exists (Supabase returns empty identities array when email exists)
+      if (data.user.identities && data.user.identities.length === 0) {
+        return {
+          data: null,
+          error: {
+            code: "VALIDATION",
+            message: "An account with this email already exists. Please sign in instead.",
+          },
+        };
+      }
+
+      const hasSession = Boolean(data.session);
       const profile = await this.getLiveProfile(data.user.id);
       return {
-        data: profile || {
-          id: data.user.id,
-          handle: cleanHandle,
-          fullName: fullName.trim() || cleanHandle,
-          avatarUrl: null,
-          role: "student",
-          createdAt: data.user.created_at,
+        data: {
+          ...(profile || {
+            id: data.user.id,
+            handle: cleanHandle,
+            fullName: fullName.trim() || cleanHandle,
+            avatarUrl: null,
+            role: "student",
+            createdAt: data.user.created_at,
+          }),
+          requiresVerification: !hasSession,
         },
         error: null,
       };

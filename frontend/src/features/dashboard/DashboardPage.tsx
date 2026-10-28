@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowUpRight,
@@ -23,84 +23,67 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-
 import { Calendar } from "@/components/ui/calendar";
+import { subjects } from "@/shared/subjects";
 
-const subjects = [
-  {
-    code: "CS301",
-    name: "Database Management Systems",
-    icon: Database,
-    description: "Explore databases and SQL.",
-  },
-  {
-    code: "CS302",
-    name: "Computer Networks",
-    icon: Network,
-    description: "Learn networking fundamentals.",
-  },
-  {
-    code: "CS303",
-    name: "Operating Systems",
-    icon: Monitor,
-    description: "Understand processes and memory.",
-  },
-  {
-    code: "CS304",
-    name: "Design and Analysis of Algorithms",
-    icon: Code2,
-    description: "Practice algorithms and problem-solving.",
-  },
-];
+const subjectMeta: Record<string, { icon: React.ElementType; description: string }> = {
+  cs301: { icon: Database, description: "Explore databases, relational schemas, and SQL queries." },
+  cs302: { icon: Network, description: "Learn networking protocols, routing, and transport fundamentals." },
+  cs303: { icon: Monitor, description: "Understand processes, scheduling, virtual memory, and concurrency." },
+  cs304: { icon: Code2, description: "Practice algorithmic design patterns and computational complexity." },
+};
 
 const learningTools = [
   {
     title: "Resume Reviewer",
-    description: "Improve your resume for placements.",
+    description: "Improve your resume for placements with automated feedback.",
     icon: FileText,
     href: "/resume-reviewer",
     label: "Review",
   },
   {
     title: "Daily Quiz",
-    description: "Test your knowledge every day.",
+    description: "Test your knowledge daily and maintain your streak.",
     icon: Brain,
     href: "/daily-quiz",
     label: "Practice",
   },
   {
     title: "Project Analysis",
-    description: "Review and analyze your projects.",
+    description: "Analyze code repositories, complexity, and dependencies.",
     icon: GitBranch,
     href: "/project-analysis",
     label: "Explore",
   },
 ];
 
-// Demonstration data only; these are not live discussions.
 const sampleDiscussions = [
   {
     title: "Difference between BCNF and 3NF decomposition",
     subject: "DBMS",
-    preview: "Review normalization and database design.",
+    subjectId: "cs301",
+    preview: "Review normalization rules and lossless join dependencies.",
     replies: 5,
   },
   {
     title: "How does Go-Back-N handle lost ACKs?",
     subject: "CN",
-    preview: "Discuss retransmissions and sliding windows.",
+    subjectId: "cs302",
+    preview: "Discuss timer mechanics, cumulative acknowledgments, and window sizes.",
     replies: 13,
   },
   {
     title: "Extra questions on end-semester preparation",
     subject: "DBMS",
-    preview: "Share useful questions and study resources.",
+    subjectId: "cs301",
+    preview: "Share useful questions and past examination resources.",
     replies: 45,
   },
   {
-    title: "PYQ question has a mistake",
+    title: "PYQ question has a mistake in subnet mask",
     subject: "CN",
-    preview: "Discuss the question and possible correction.",
+    subjectId: "cs302",
+    preview: "Discuss the question breakdown and official answer key correction.",
     replies: 11,
   },
 ];
@@ -161,14 +144,18 @@ export default function DashboardPage() {
             <CardContent className="p-3 sm:p-4">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {subjects.map((subject) => {
-                  const Icon = subject.icon;
+                  const meta = subjectMeta[subject.id] || {
+                    icon: BookOpen,
+                    description: "Access course materials and notes.",
+                  };
+                  const Icon = meta.icon;
 
                   return (
                     <Link
-  key={subject.code}
-  to={`/subjects/${subject.code.toLowerCase()}`}
-  className="group block min-h-[105px] rounded-lg border border-border bg-card p-3 transition-colors hover:bg-muted/40"
->
+                      key={subject.id}
+                      to={`/subjects/${subject.id}`}
+                      className="group block min-h-[105px] rounded-lg border border-border bg-card p-3 transition-colors hover:bg-muted/40"
+                    >
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex size-9 items-center justify-center rounded-lg bg-muted text-foreground">
                           <Icon className="size-4" />
@@ -184,7 +171,7 @@ export default function DashboardPage() {
                       </h3>
 
                       <p className="mt-1 text-xs leading-4 text-muted-foreground">
-                        {subject.description}
+                        {meta.description}
                       </p>
                     </Link>
                   );
@@ -193,7 +180,7 @@ export default function DashboardPage() {
 
               <div className="mt-4 flex items-center gap-2 border-t border-border pt-3 text-xs text-muted-foreground">
                 <CheckCircle2 className="size-4" />
-                <span>4 subjects available in your workspace</span>
+                <span>{subjects.length} subjects available in your workspace</span>
               </div>
             </CardContent>
           </Card>
@@ -216,7 +203,7 @@ export default function DashboardPage() {
               </div>
             </CardHeader>
 
-            <CardContent className="p-3 sm:p-4">
+            <CardContent className="p-3 sm:p-4 flex flex-col items-center">
               <Calendar
                 mode="single"
                 month={calendarMonth}
@@ -224,35 +211,10 @@ export default function DashboardPage() {
                 selected={selectedDate}
                 onSelect={setSelectedDate}
                 showOutsideDays
-                className="mx-auto w-full"
-                classNames={{
-                  months: "w-full",
-                  month: "w-full space-y-3",
-                  month_caption:
-                    "relative flex h-9 items-center justify-center",
-                  caption_label: "text-sm font-semibold",
-                  nav: "absolute inset-x-0 top-0 flex items-center justify-between",
-                  button_previous:
-                    "inline-flex size-8 items-center justify-center rounded-md hover:bg-muted",
-                  button_next:
-                    "inline-flex size-8 items-center justify-center rounded-md hover:bg-muted",
-                  month_grid: "w-full border-collapse",
-                  weekdays: "flex w-full",
-                  weekday:
-                    "flex-1 py-2 text-center text-xs font-medium text-muted-foreground",
-                  week: "mt-1 flex w-full",
-                  day: "flex-1 p-0 text-center",
-                  day_button:
-                    "mx-auto flex size-8 items-center justify-center rounded-full text-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  today:
-                    "[&>button]:border [&>button]:border-primary [&>button]:font-semibold",
-                  selected:
-                    "[&>button]:bg-primary [&>button]:text-primary-foreground",
-                  outside: "text-muted-foreground/40",
-                }}
+                className="w-full flex justify-center p-0"
               />
 
-              <div className="mt-3 rounded-lg border border-border bg-muted/30 p-3">
+              <div className="mt-3 w-full rounded-lg border border-border bg-muted/30 p-3">
                 <div className="flex items-start gap-2">
                   <CalendarDays className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
 
@@ -334,7 +296,7 @@ export default function DashboardPage() {
 
           {/* Recent Community Discussions */}
           <Card className="min-w-0 overflow-hidden rounded-xl shadow-none">
-            <CardHeader className="border-b border-border px-4 py-3 sm:px-5">
+            <CardHeader className="flex flex-row items-center justify-between border-b border-border px-4 py-3 sm:px-5">
               <div className="flex items-center gap-3">
                 <MessageCircle className="size-5 text-muted-foreground" />
 
@@ -344,17 +306,26 @@ export default function DashboardPage() {
                   </CardTitle>
 
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Sample discussion previews
+                    Active forum topics across your subjects
                   </p>
                 </div>
               </div>
+
+              <Link
+                to="/communities"
+                className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+              >
+                Browse All
+                <ArrowUpRight className="size-3.5" />
+              </Link>
             </CardHeader>
 
             <CardContent className="space-y-2 p-3 sm:p-4">
               {sampleDiscussions.map((discussion) => (
-                <div
+                <Link
                   key={discussion.title}
-                  className="rounded-lg border border-border bg-card p-3 transition-colors hover:bg-muted/40"
+                  to={`/communities?subject=${discussion.subjectId}`}
+                  className="block rounded-lg border border-border bg-card p-3 transition-colors hover:bg-muted/40"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex min-w-0 items-start gap-2">
@@ -376,12 +347,8 @@ export default function DashboardPage() {
                   <p className="mt-2 pl-1 text-xs leading-4 text-muted-foreground">
                     {discussion.preview}
                   </p>
-                </div>
+                </Link>
               ))}
-
-              <p className="pt-1 text-[11px] leading-4 text-muted-foreground">
-                Demonstration data only — these are not live discussions.
-              </p>
             </CardContent>
           </Card>
         </section>
