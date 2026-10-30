@@ -123,7 +123,7 @@ export default function DashboardPage() {
               </CardTitle>
             </CardHeader>
 
-            <CardContent className="flex justify-center p-4">
+            <CardContent className="p-4 sm:p-5">
               <Calendar
                 mode="single"
                 month={calendarMonth}
@@ -131,7 +131,7 @@ export default function DashboardPage() {
                 selected={selectedDate}
                 onSelect={setSelectedDate}
                 showOutsideDays
-                className="p-0"
+                className="w-full p-0"
               />
             </CardContent>
           </Card>
