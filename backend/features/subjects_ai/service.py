@@ -11,6 +11,7 @@ from google import genai
 from google.genai import types
 
 from core.config import settings
+from .errors import parse_gemini_error
 from .schemas import ContextDocument, Message
 
 if TYPE_CHECKING:
@@ -127,7 +128,8 @@ def generate_reply(
         raise
     except Exception as e:
         logger.exception("Gemini call failed")
-        raise HTTPException(status_code=502, detail=f"AI service error: {e}")
+        status_code, user_msg = parse_gemini_error(e)
+        raise HTTPException(status_code=status_code, detail=user_msg)
 
     return response.text or "Sorry, I couldn't generate a response."
 
@@ -157,8 +159,9 @@ def stream_reply(
                 if chunk.text:
                     yield _sse({"type": "token", "text": chunk.text})
             yield _sse({"type": "done"})
-        except Exception:
+        except Exception as exc:
             logger.exception("Gemini streaming failed")
-            yield _sse({"type": "error", "message": "The AI service had a problem. Please try again."})
+            status_code, user_msg = parse_gemini_error(exc)
+            yield _sse({"type": "error", "message": user_msg, "code": status_code})
 
     return event_stream()

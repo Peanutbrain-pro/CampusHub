@@ -19,6 +19,8 @@ import {
   Search,
   Sparkles,
   RotateCcw,
+  ShieldCheck,
+  UploadCloud,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,10 +37,14 @@ import { communitiesService } from "./services";
 import type { ResourceType, ResourceCategory } from "./services/types";
 import { toast } from "sonner";
 import { PdfOptimizerModal } from "./components/PdfOptimizerModal";
+import { useAuth } from "@/lib/auth-context";
+import { canModerate } from "@/shared/user";
 
 export const ShareResourcePage: React.FC = () => {
   const { subjectId } = useParams<{ subjectId: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isStaff = canModerate(user, subjectId);
 
   const [subjectName, setSubjectName] = useState<string>("Subject Community");
   const [title, setTitle] = useState("");
@@ -168,16 +174,24 @@ export const ShareResourcePage: React.FC = () => {
         category,
         pageCount: 1,
         file,
+        isDirectPublish: isStaff,
       });
 
       if (res.error) {
-        toast.error(res.error.message || "Failed to submit resource for review.");
+        toast.error(
+          res.error.message ||
+            (isStaff ? "Failed to publish resource." : "Failed to submit resource for review.")
+        );
         return;
       }
 
-      toast.success(
-        "Resource submitted for moderation! An admin or moderator will review and approve it."
-      );
+      if (isStaff) {
+        toast.success("Resource published directly to community archive!");
+      } else {
+        toast.success(
+          "Resource submitted for moderation! An admin or moderator will review and approve it."
+        );
+      }
       navigate(`/communities/${subjectId}`);
     } finally {
       setIsSubmitting(false);
@@ -200,54 +214,87 @@ export const ShareResourcePage: React.FC = () => {
       </div>
 
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">
-          Submit Resource for Moderation
-        </h1>
+        <div className="flex items-center gap-2 flex-wrap">
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+            {isStaff ? "Publish Resource to Community" : "Submit Resource for Moderation"}
+          </h1>
+          {isStaff && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+              <ShieldCheck className="h-3.5 w-3.5" />
+              {user?.role === "admin" ? "Admin Direct Upload" : "Moderator Direct Upload"}
+            </span>
+          )}
+        </div>
         <p className="text-sm text-muted-foreground mt-1">
-          Contribute study material or past exams to address note scarcity in{" "}
-          <span className="font-semibold text-foreground">{subjectName}</span>. Submissions are reviewed by
-          moderators before being added to the shared archive.
+          {isStaff ? (
+            <>
+              As a moderator of{" "}
+              <span className="font-semibold text-foreground">{subjectName}</span>, your uploaded document will be published directly into the public archive and immediately available to students without requiring self-review.
+            </>
+          ) : (
+            <>
+              Contribute study material or past exams to address note scarcity in{" "}
+              <span className="font-semibold text-foreground">{subjectName}</span>. Submissions are reviewed by
+              moderators before being added to the shared archive.
+            </>
+          )}
         </p>
       </div>
 
-      {/* Community Guidelines Card */}
-      <Card className="border-primary/20 bg-primary/5">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-semibold flex items-center gap-2 text-primary">
-            <Info className="h-4 w-4" />
-            Community Sharing Guidelines
-          </CardTitle>
-          <CardDescription className="text-xs">
-            Please follow these principles before uploading documents:
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2.5 text-xs text-foreground/90">
-          <div className="flex items-start gap-2.5">
-            <Search className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-            <div>
-              <span className="font-semibold">Check for duplicates first:</span> Please browse the{" "}
-              <Link to={`/communities/${subjectId}`} className="underline text-primary">
-                subject archive
-              </Link>{" "}
-              to ensure this specific note or PYQ question paper is not already uploaded.
+      {/* Community Guidelines or Staff Publication Notice */}
+      {isStaff ? (
+        <Card className="border-emerald-500/20 bg-emerald-500/5">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+              <ShieldCheck className="h-4 w-4" />
+              Direct Community Publication
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Staff Bypass Active: Your upload will be published immediately to the{" "}
+              <span className="font-medium text-foreground">{category}</span> category of the{" "}
+              <span className="font-medium text-foreground">{subjectName}</span> archive.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      ) : (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2 text-primary">
+              <Info className="h-4 w-4" />
+              Community Sharing Guidelines
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Please follow these principles before uploading documents:
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2.5 text-xs text-foreground/90">
+            <div className="flex items-start gap-2.5">
+              <Search className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+              <div>
+                <span className="font-semibold">Check for duplicates first:</span> Please browse the{" "}
+                <Link to={`/communities/${subjectId}`} className="underline text-primary">
+                  subject archive
+                </Link>{" "}
+                to ensure this specific note or PYQ question paper is not already uploaded.
+              </div>
             </div>
-          </div>
-          <div className="flex items-start gap-2.5">
-            <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
-            <div>
-              <span className="font-semibold">High academic utility:</span> Ensure the document is legible,
-              complete, and genuinely helpful (e.g. clean handwritten notes, solved PYQs, or formula sheets).
+            <div className="flex items-start gap-2.5">
+              <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-semibold">High academic utility:</span> Ensure the document is legible,
+                complete, and genuinely helpful (e.g. clean handwritten notes, solved PYQs, or formula sheets).
+              </div>
             </div>
-          </div>
-          <div className="flex items-start gap-2.5">
-            <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
-            <div>
-              <span className="font-semibold">Size and format limit:</span> Uploads are restricted to PDF
-              format with a maximum size of 5 MB per document.
+            <div className="flex items-start gap-2.5">
+              <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-semibold">Size and format limit:</span> Uploads are restricted to PDF
+                format with a maximum size of 5 MB per document.
+              </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Storage Quota Indicator */}
       {quotaUsage && (
@@ -464,7 +511,12 @@ export const ShareResourcePage: React.FC = () => {
                 {isSubmitting ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Submitting...
+                    {isStaff ? "Publishing..." : "Submitting..."}
+                  </>
+                ) : isStaff ? (
+                  <>
+                    <UploadCloud className="mr-2 h-4 w-4" />
+                    Publish to Community
                   </>
                 ) : (
                   "Submit for Moderation"

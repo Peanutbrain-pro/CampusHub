@@ -49,13 +49,20 @@ function buildHistory(messages: UiMessage[]): ChatMessage[] {
 
 function friendlyError(e: unknown): string {
   if (e instanceof ChatApiError) {
+    if (e.status === 503 || e.message?.toLowerCase().includes("high demand") || e.message?.toLowerCase().includes("overloaded")) {
+      return "The AI model is currently experiencing high demand. Please wait a moment and try again.";
+    }
     if (e.status === 429) {
       return e.retryAfterSeconds
         ? `You're sending messages too fast. Try again in ${e.retryAfterSeconds}s.`
-        : "You're sending messages too fast. Please wait a moment.";
+        : (e.message || "You're sending messages too fast. Please wait a moment.");
     }
     if (e.status === 401) return "Your session has expired. Please log in again.";
     return e.message;
+  }
+  const str = String(e || "").toLowerCase();
+  if (str.includes("high demand") || str.includes("overloaded") || str.includes("503")) {
+    return "The AI model is currently experiencing high demand. Please wait a moment and try again.";
   }
   return "Couldn't reach the server. Check your connection and try again.";
 }

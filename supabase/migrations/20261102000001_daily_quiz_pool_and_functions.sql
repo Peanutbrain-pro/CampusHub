@@ -488,15 +488,5 @@ INSERT INTO public.daily_quiz_questions (
     'Set Theory & Relations',
     'Equivalence relation: reflexive, symmetric, and transitive.'
   )
-ON CONFLICT (id) DO UPDATE SET
-  question = EXCLUDED.question,
-  options = EXCLUDED.options,
-  correct_answer_index = EXCLUDED.correct_answer_index,
-  explanation = EXCLUDED.explanation,
-  subject_id = EXCLUDED.subject_id,
-  source = EXCLUDED.source,
-  status = EXCLUDED.status,
-  difficulty = EXCLUDED.difficulty,
-  topic = EXCLUDED.topic,
-  source_snippet = EXCLUDED.source_snippet;
+ON CONFLICT (id) DO NOTHING;
 

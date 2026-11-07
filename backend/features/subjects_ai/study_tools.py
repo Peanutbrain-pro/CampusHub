@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from google.genai import types
 
 from core.config import settings
+from .errors import parse_gemini_error
 from .materials import get_owned_study_materials
 from .service import get_client
 
@@ -151,15 +152,10 @@ Requirements:
         )
     except HTTPException:
         raise
-    except Exception:
+    except Exception as exc:
         logger.exception("Flashcard generation failed")
-        raise HTTPException(
-            status_code=502,
-            detail=(
-                "Gemini could not generate flashcards. "
-                "Check the selected files and try again."
-            ),
-        )
+        status_code, user_msg = parse_gemini_error(exc)
+        raise HTTPException(status_code=status_code, detail=user_msg)
 
     if not response.text:
         raise HTTPException(
@@ -350,12 +346,10 @@ Return only valid JSON using this structure:
         )
     except HTTPException:
         raise
-    except Exception:
+    except Exception as exc:
         logger.exception("Quiz generation failed")
-        raise HTTPException(
-            status_code=502,
-            detail="Gemini could not generate the quiz. Please try again.",
-        )
+        status_code, user_msg = parse_gemini_error(exc)
+        raise HTTPException(status_code=status_code, detail=user_msg)
 
     if not response.text:
         raise HTTPException(

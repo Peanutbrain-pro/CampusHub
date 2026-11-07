@@ -1,6 +1,6 @@
 import { Crepe } from "@milkdown/crepe";
 import "@milkdown/crepe/theme/common/style.css";
-import "@milkdown/crepe/theme/frame.css";
+import "./milkdown-theme.css";
 import { useEffect, useRef } from "react";
 
 interface Props {
@@ -16,6 +16,9 @@ export function MilkdownEditor({ initialValue, onChange }: Props) {
 
   useEffect(() => {
     if (!rootRef.current) return;
+    let cancelled = false;
+    let created = false;
+
     const editor = new Crepe({
       root: rootRef.current,
       defaultValue: initialValue || "# Untitled note\n\nStart writing…",
@@ -29,9 +32,22 @@ export function MilkdownEditor({ initialValue, onChange }: Props) {
         [Crepe.Feature.Placeholder]: { text: "Start writing your Markdown note…", mode: "block" },
       },
     });
+
     editor.on((listener) => listener.markdownUpdated((_ctx, markdown) => onChangeRef.current(markdown)));
-    void editor.create();
-    return () => { void editor.destroy(); };
+
+    void editor.create().then(() => {
+      created = true;
+      if (cancelled) {
+        void editor.destroy();
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      if (created) {
+        void editor.destroy();
+      }
+    };
     // The parent keys this component by note id, so a new note safely gets a new editor.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

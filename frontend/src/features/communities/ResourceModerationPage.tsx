@@ -13,6 +13,9 @@ import {
   ExternalLink,
   Loader2,
   Search,
+  Trash2,
+  CheckSquare,
+  Square,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,6 +48,11 @@ export const ResourceModerationPage: React.FC = () => {
 
   const [reportToDelete, setReportToDelete] = useState<Report | null>(null);
   const [noteToReject, setNoteToReject] = useState<ResourceNote | null>(null);
+
+  // Multi-select state for bulk discard
+  const [selectedNoteIds, setSelectedNoteIds] = useState<Set<string>>(new Set());
+  const [isBatchRejectOpen, setIsBatchRejectOpen] = useState(false);
+  const [isBatchProcessing, setIsBatchProcessing] = useState(false);
 
   // Filters & Sorting state
   const [selectedSubject, setSelectedSubject] = useState<string>(urlSubjectId || "all");
@@ -207,6 +215,11 @@ export const ResourceModerationPage: React.FC = () => {
       }
 
       setPendingNotes((prev) => prev.filter((p) => p.id !== noteToReject.id));
+      setSelectedNoteIds((prev) => {
+        const next = new Set(prev);
+        next.delete(noteToReject.id);
+        return next;
+      });
       toast.success(`"${noteToReject.title}" rejected and deleted.`);
       setNoteToReject(null);
     } catch (err: any) {
@@ -215,6 +228,67 @@ export const ResourceModerationPage: React.FC = () => {
       setIsProcessingId(null);
     }
   };
+
+  const handleToggleNoteSelect = (id: string) => {
+    setSelectedNoteIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const handleSelectAllVisible = () => {
+    if (selectedNoteIds.size === filteredNotes.length) {
+      setSelectedNoteIds(new Set());
+    } else {
+      setSelectedNoteIds(new Set(filteredNotes.map((n) => n.id)));
+    }
+  };
+
+  const handleClearSelection = () => {
+    setSelectedNoteIds(new Set());
+  };
+
+  const handleConfirmBatchReject = async () => {
+    if (selectedNoteIds.size === 0) return;
+
+    const notesToReject = pendingNotes.filter((n) => selectedNoteIds.has(n.id));
+    const count = notesToReject.length;
+
+    try {
+      setIsBatchProcessing(true);
+      if (communitiesService.rejectMultipleResources) {
+        const res = await communitiesService.rejectMultipleResources(
+          notesToReject.map((n) => ({ id: n.id, storagePath: n.storagePath }))
+        );
+        if (res.error) {
+          toast.error(res.error.message || "Failed to batch discard resources.");
+          return;
+        }
+      } else if (communitiesService.rejectResource) {
+        await Promise.allSettled(
+          notesToReject.map((n) => communitiesService.rejectResource!(n.id, n.storagePath))
+        );
+      }
+
+      setPendingNotes((prev) => prev.filter((p) => !selectedNoteIds.has(p.id)));
+      setSelectedNoteIds(new Set());
+      setIsBatchRejectOpen(false);
+      toast.success(`Successfully discarded ${count} note submission${count === 1 ? "" : "s"}.`);
+    } catch (err: any) {
+      toast.error(err.message || "An error occurred during batch discard.");
+    } finally {
+      setIsBatchProcessing(false);
+    }
+  };
+
+  useEffect(() => {
+    setSelectedNoteIds(new Set());
+  }, [activeTab, selectedSubject, typeFilter]);
 
   // Open / Preview document
   const handleOpenDocument = async (note: ResourceNote) => {

@@ -13,8 +13,7 @@ backend/
 │   ├── rate_limit.py           # In-memory sliding window rate limiter
 │   └── security.py             # JWT bearer auth & Supabase token validation
 ├── features/                   # 1:1 Matching Feature Modules
-│   ├── subjects_ai/            # router.py, schemas.py, service.py
-│   └── daily_quiz/             # router.py, schemas.py, service.py
+│   └── subjects_ai/            # router.py, schemas.py, service.py
 ├── scripts/                    # Maintenance & utility scripts
 │   └── generate_quiz_questions.py # AI generation script for daily quiz questions
 ├── shared/                     # Health check endpoint
@@ -30,7 +29,7 @@ backend/
 | Feature Module | Serves Frontend | Data & API Flow |
 | :--- | :--- | :--- |
 | **`features/subjects_ai/`** | `features/subject-ai-panel/` | **FastAPI** (`/api/v1/subjects-ai/*`) |
-| **`features/daily_quiz/`** | `features/daily-quiz/` | **FastAPI** & **Supabase** (`/api/v1/daily-quiz/*`) |
+| **Daily Quiz Engine** | `features/daily-quiz/` | **Supabase RPCs** (`get_today_quiz`, `submit_daily_quiz`, `user_streaks`) |
 
 ---
 

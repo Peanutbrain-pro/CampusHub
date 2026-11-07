@@ -146,6 +146,7 @@ export interface CommunitiesService {
   getPendingResources?(subjectId?: string): Promise<Result<ResourceNote[]>>;
   approveResource?(resourceId: string, category?: ResourceCategory): Promise<Result<ResourceNote>>;
   rejectResource?(resourceId: string, storagePath?: string, reason?: string): Promise<Result<boolean>>;
+  rejectMultipleResources?(notes: { id: string; storagePath?: string }[], reason?: string): Promise<Result<{ rejectedCount: number }>>;
   uploadResource(data: {
     subjectId: string;
     title: string;
@@ -153,6 +154,7 @@ export interface CommunitiesService {
     category?: ResourceCategory;
     pageCount?: number;
     file?: File;
+    isDirectPublish?: boolean;
   }): Promise<Result<ResourceNote>>;
   deleteResource?(resourceId: string, storagePath?: string): Promise<Result<boolean>>;
   deletePost?(postId: string, imagePaths?: string[]): Promise<Result<boolean>>;

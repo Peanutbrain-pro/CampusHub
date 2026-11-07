@@ -92,12 +92,17 @@ const delay = (milliseconds: number): Promise<void> =>
     setTimeout(resolve, milliseconds);
   });
 
+function getIstDate(offsetDays = 0): string {
+  const d = new Date(Date.now() + offsetDays * 24 * 60 * 60 * 1000);
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(d);
+}
+
 export const mockDailyQuizService: DailyQuizService = {
   async getTodayQuiz(): Promise<Result<TodayQuizResponse>> {
     await delay(300);
 
     const streak = loadStreak();
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getIstDate(0);
     const alreadySubmitted = streak.lastCompletedDate === today;
 
     return {
@@ -116,7 +121,7 @@ export const mockDailyQuizService: DailyQuizService = {
     await delay(300);
 
     const streak = loadStreak();
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getIstDate(0);
 
     if (streak.lastCompletedDate === today) {
       return {
@@ -142,9 +147,7 @@ export const mockDailyQuizService: DailyQuizService = {
     });
 
     const total = mockQuestions.length;
-    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000)
-      .toISOString()
-      .slice(0, 10);
+    const yesterday = getIstDate(-1);
 
     streak.currentStreak =
       streak.lastCompletedDate === yesterday

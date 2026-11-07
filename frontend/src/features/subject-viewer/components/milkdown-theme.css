@@ -1,0 +1,155 @@
+/* Milkdown Crepe Theme Integration for CampusHub */
+
+.milkdown {
+  /* Typography */
+  --crepe-base-font-size: 0.9375rem;
+  --crepe-font-default: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --crepe-font-title: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --crepe-font-code: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+
+  /* Theme tokens - Light Mode */
+  --crepe-color-background: hsl(var(--background));
+  --crepe-color-on-background: hsl(var(--foreground));
+  --crepe-color-surface: hsl(var(--card));
+  --crepe-color-surface-low: hsl(var(--muted));
+  --crepe-color-on-surface: hsl(var(--foreground));
+  --crepe-color-on-surface-variant: hsl(var(--muted-foreground));
+  --crepe-color-outline: hsl(var(--muted-foreground));
+  --crepe-color-primary: hsl(var(--primary));
+  --crepe-color-secondary: hsl(var(--secondary));
+  --crepe-color-on-secondary: hsl(var(--secondary-foreground));
+  --crepe-color-inverse: hsl(var(--foreground));
+  --crepe-color-on-inverse: hsl(var(--background));
+  --crepe-color-inline-code: hsl(var(--primary));
+  --crepe-color-error: hsl(var(--destructive));
+  --crepe-color-hover: hsl(var(--accent));
+  --crepe-color-selected: hsl(var(--secondary));
+  --crepe-color-inline-area: hsl(var(--muted));
+
+  --crepe-shadow-1: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --crepe-shadow-2: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+
+  min-height: 100%;
+  background: var(--crepe-color-background) !important;
+  color: var(--crepe-color-on-background);
+}
+
+/* Theme tokens - Dark Mode */
+.dark .milkdown {
+  --crepe-color-background: hsl(var(--background));
+  --crepe-color-on-background: hsl(var(--foreground));
+  --crepe-color-surface: hsl(var(--card));
+  --crepe-color-surface-low: hsl(var(--muted));
+  --crepe-color-on-surface: hsl(var(--foreground));
+  --crepe-color-on-surface-variant: hsl(var(--muted-foreground));
+  --crepe-color-outline: hsl(var(--muted-foreground));
+  --crepe-color-primary: hsl(var(--primary));
+  --crepe-color-secondary: hsl(var(--secondary));
+  --crepe-color-on-secondary: hsl(var(--secondary-foreground));
+  --crepe-color-inverse: hsl(var(--foreground));
+  --crepe-color-on-inverse: hsl(var(--background));
+  --crepe-color-inline-code: hsl(var(--primary));
+  --crepe-color-error: hsl(var(--destructive));
+  --crepe-color-hover: hsl(var(--accent));
+  --crepe-color-selected: hsl(var(--secondary));
+  --crepe-color-inline-area: hsl(var(--muted));
+
+  --crepe-shadow-1: 0 1px 3px 0 rgb(0 0 0 / 0.35), 0 1px 2px -1px rgb(0 0 0 / 0.35);
+  --crepe-shadow-2: 0 4px 10px -1px rgb(0 0 0 / 0.5), 0 2px 6px -2px rgb(0 0 0 / 0.5);
+
+  background: var(--crepe-color-background) !important;
+}
+
+/* Outer editor container */
+.milkdown-editor {
+  background-color: hsl(var(--background));
+}
+
+/* Top persistent formatting bar */
+.milkdown .milkdown-top-bar {
+  background: hsl(var(--card)) !important;
+  border-bottom: 1px solid hsl(var(--border)) !important;
+}
+
+.milkdown .milkdown-top-bar .top-bar-divider {
+  background: hsl(var(--border)) !important;
+}
+
+.milkdown .milkdown-top-bar .top-bar-heading-button:hover,
+.milkdown .milkdown-top-bar .top-bar-item:hover {
+  background: hsl(var(--accent)) !important;
+}
+
+.milkdown .milkdown-top-bar .top-bar-heading-button .top-bar-heading-label {
+  color: hsl(var(--foreground)) !important;
+}
+
+.milkdown .milkdown-top-bar .top-bar-heading-button .top-bar-chevron svg,
+.milkdown .milkdown-top-bar .top-bar-item svg {
+  color: hsl(var(--muted-foreground)) !important;
+  stroke: hsl(var(--muted-foreground)) !important;
+  fill: hsl(var(--muted-foreground)) !important;
+}
+
+.milkdown .milkdown-top-bar .top-bar-item.active {
+  background: hsl(var(--secondary)) !important;
+}
+
+.milkdown .milkdown-top-bar .top-bar-item.active svg {
+  color: hsl(var(--primary)) !important;
+  stroke: hsl(var(--primary)) !important;
+  fill: hsl(var(--primary)) !important;
+}
+
+/* Dropdown menus, slash menu, popovers, and floating toolbars */
+.milkdown .top-bar-heading-dropdown,
+.milkdown .milkdown-slash-menu,
+.milkdown .milkdown-toolbar {
+  background: hsl(var(--popover)) !important;
+  color: hsl(var(--popover-foreground)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  box-shadow: var(--crepe-shadow-2) !important;
+}
+
+.milkdown .top-bar-heading-option {
+  color: hsl(var(--popover-foreground)) !important;
+}
+
+.milkdown .top-bar-heading-option:hover,
+.milkdown .milkdown-slash-menu li:hover,
+.milkdown .milkdown-toolbar .toolbar-item:hover {
+  background: hsl(var(--accent)) !important;
+  color: hsl(var(--accent-foreground)) !important;
+}
+
+.milkdown .top-bar-heading-option.active {
+  background: hsl(var(--secondary)) !important;
+  color: hsl(var(--primary)) !important;
+  font-weight: 600;
+}
+
+/* Code block editor */
+.milkdown .milkdown-code-block {
+  background: hsl(var(--card)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  border-radius: var(--radius);
+}
+
+.milkdown .milkdown-code-block .cm-editor,
+.milkdown .milkdown-code-block .cm-gutters {
+  background: transparent !important;
+}
+
+/* Block handle (+ / drag handle) */
+.milkdown .milkdown-block-handle .operation-item:hover {
+  background: hsl(var(--accent)) !important;
+}
+
+/* ProseMirror editing canvas */
+.milkdown .ProseMirror {
+  min-height: calc(100% - 44px);
+  padding: 1.5rem 2rem 4rem;
+  outline: none;
+  background: transparent !important;
+  color: hsl(var(--foreground)) !important;
+}

@@ -44,9 +44,18 @@ async function toApiError(
     }));
   }
 
+  if (response.status === 503) {
+    const msg =
+      typeof detail === "string" && detail.trim()
+        ? detail
+        : "The AI model is currently experiencing high demand. Please wait a moment and try again.";
+    return new ChatApiError(msg, 503);
+  }
   if (response.status === 429) {
     return new ChatApiError(
-      detail?.error?.message ?? "Too many requests. Please slow down.",
+      typeof detail === "string"
+        ? detail
+        : (detail?.error?.message ?? "Too many requests. Please slow down."),
       429,
       detail?.error?.details?.retry_after_seconds,
     );

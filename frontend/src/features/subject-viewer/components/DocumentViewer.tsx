@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { FileText, Save, Trash2, ShieldCheck, Lock } from "lucide-react";
+import { FileText, Save, Trash2, ShieldCheck, Lock, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,9 @@ interface Props {
   title: string;
   content: string;
   saving: boolean;
+  isDirty?: boolean;
+  contentUrl?: string | null;
+  isLoadingUrl?: boolean;
   onTitle: (value: string) => void;
   onContent: (value: string) => void;
   onSave: () => void;
@@ -22,6 +25,9 @@ export function DocumentViewer({
   title,
   content,
   saving,
+  isDirty = false,
+  contentUrl,
+  isLoadingUrl = false,
   onTitle,
   onContent,
   onSave,
@@ -59,6 +65,8 @@ export function DocumentViewer({
 
   // Admin-approved community resource
   if (note.tag !== "Private") {
+    const activeUrl = contentUrl ?? note.contentUrl;
+
     return (
       <div className="flex h-full flex-col bg-muted/15">
         <div className="flex items-center justify-between border-b bg-background px-4 py-2 text-xs">
@@ -74,10 +82,15 @@ export function DocumentViewer({
           </div>
         </div>
 
-        {note.contentUrl ? (
+        {isLoadingUrl ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-2 text-muted-foreground">
+            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            <span className="text-xs">Preparing document viewer…</span>
+          </div>
+        ) : activeUrl ? (
           <iframe
             className="min-h-0 flex-1 w-full bg-white border-0"
-            src={note.contentUrl}
+            src={activeUrl}
             title={note.title}
           />
         ) : (
@@ -110,17 +123,30 @@ export function DocumentViewer({
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-3 border-b bg-background px-4 py-2.5">
-        <Input
-          value={title}
-          onChange={(event) => onTitle(event.target.value)}
-          aria-label="Note title"
-          placeholder="Untitled note..."
-          className="h-8 max-w-sm text-sm font-medium"
-        />
+        <div className="relative flex-1 max-w-sm">
+          <Input
+            value={title}
+            onChange={(event) => onTitle(event.target.value)}
+            aria-label="Note title"
+            placeholder="Untitled note..."
+            className="h-8 text-sm font-medium"
+          />
+          {isDirty && (
+            <span
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 h-2 w-2 rounded-full bg-amber-500"
+              title="Unsaved changes"
+            />
+          )}
+        </div>
 
-        <div className="hidden sm:flex items-center gap-1 text-xs text-muted-foreground">
+        <div className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground">
           <Lock className="h-3 w-3" />
           <span>Private Note</span>
+          {isDirty && (
+            <Badge variant="outline" className="text-[10px] text-amber-600 dark:text-amber-400 border-amber-500/30">
+              Unsaved
+            </Badge>
+          )}
         </div>
 
         <div className="ml-auto flex items-center gap-2">
@@ -139,7 +165,7 @@ export function DocumentViewer({
 
           <Button
             onClick={onSave}
-            disabled={saving}
+            disabled={saving || !isDirty}
             size="sm"
             className="h-8 gap-1.5 text-xs font-semibold cursor-pointer"
             title="Save note (Ctrl+S)"

@@ -3,9 +3,8 @@
 The **Daily Quiz** feature provides daily computer science fundamentals questions to encourage consistent student revision. It features a timed multiple-choice player, instant grading with explanations, and streak tracking to reward consistent daily study habits.
 
 - **Frontend Path:** `frontend/src/features/daily-quiz/`
-- **Backend Counterpart:** [`backend/features/daily_quiz/`](../../../../backend/features/daily_quiz/README.md)
 - **Primary Route:** `/daily-quiz`
-- **Backend Services:** FastAPI (`/api/v1/daily-quiz/*`) + Supabase (`user_streaks` table)
+- **Backend Services:** Supabase RPCs (`get_today_quiz`, `submit_daily_quiz`) + PostgreSQL tables (`daily_quiz_questions`, `daily_quiz_assignments`, `user_streaks`, `daily_quiz_submissions`)
 
 > [!IMPORTANT]
 > **Feature Isolation Rule:**
@@ -15,30 +14,17 @@ The **Daily Quiz** feature provides daily computer science fundamentals question
 
 ## 1. Backend Integration Details
 
-This feature communicates 1:1 with the FastAPI backend module at [`backend/features/daily_quiz/`](../../../../backend/features/daily_quiz/).
+This feature communicates directly with Supabase via Security Definer RPCs and PostgreSQL tables with Row-Level Security:
 
-### FastAPI Endpoints (`/api/v1/daily-quiz`)
-- **`GET /api/v1/daily-quiz/today`**: Retrieves today's active question set.
-  - **Response:**
-    ```json
-    {
-      "date": "2026-10-15",
-      "questions": [
-        {
-          "id": "q1",
-          "question": "What is the worst-case time complexity of QuickSort?",
-          "options": ["O(n log n)", "O(n)", "O(n^2)", "O(log n)"],
-          "correct_answer_index": 2,
-          "explanation": "When partitioning produces maximally unbalanced subproblems (e.g. sorted input with last element pivot)."
-        }
-      ]
-    }
-    ```
-- **`POST /api/v1/daily-quiz/submit`**: Submits user answers and evaluates score.
-  - **Payload:** `{ "answers": { "q1": 2 } }`
-  - **Response:** `{ "score": 1, "total": 1, "streak_count": 6 }`
+### Supabase RPCs
+- **`public.get_today_quiz()`**:
+  - Pinned to Indian Standard Time (`Asia/Kolkata`).
+  - Checks if completed today; if not, deterministically assigns 5 questions from enrolled subjects (with top-up from general pool) and records snapshot in `public.daily_quiz_assignments`.
+  - Returns question payloads without leaking correct answers or explanations.
+- **`public.submit_daily_quiz(p_answers JSONB)`**:
+  - Validates submitted question IDs match today's locked snapshot in `daily_quiz_assignments`.
+  - Validates answer values are numbers, scores against backend questions, updates `user_streaks`, and returns detailed question explanations.
 
-Refer to [`backend/features/daily_quiz/router.py`](../../../../backend/features/daily_quiz/router.py) and [`backend/features/daily_quiz/schemas.py`](../../../../backend/features/daily_quiz/schemas.py).
 
 ---
 

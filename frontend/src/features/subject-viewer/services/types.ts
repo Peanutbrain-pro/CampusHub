@@ -23,6 +23,7 @@ export interface CreateTextNoteInput {
 export interface SubjectViewerService {
   getSubject(subjectId: string): Promise<Result<Subject>>;
   getNotesTree(subjectId: string): Promise<Result<SubjectNote[]>>;
+  getDocumentUrl(storagePath: string): Promise<Result<string>>;
   createTextNote(input: CreateTextNoteInput): Promise<Result<SubjectNote>>;
   updateTextNote(noteId: string, title: string, content: string): Promise<Result<SubjectNote>>;
   deleteTextNote(noteId: string): Promise<Result<boolean>>;

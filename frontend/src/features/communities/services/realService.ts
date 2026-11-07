@@ -877,31 +877,54 @@ export const realCommunitiesService: CommunitiesService = {
         };
       }
 
-      // 2. Insert record into public.notes (queued as pending for moderation)
-      const { data: inserted, error: insertError } = await supabase
-        .from("notes")
-        .insert({
-          subject_id: data.subjectId,
-          user_id: user.id,
-          title: data.title.trim(),
-          description: data.category || "Other",
-          storage_path: storagePath,
-          tag: data.type === "PYQ" ? "PYQ" : "Lecture",
-          is_shared: false,
-          status: "pending",
-          file_size_bytes: data.file.size,
-          page_count: data.pageCount || 1,
-        })
-        .select("*, profiles!notes_user_id_fkey(handle, full_name)")
-        .single();
+      // 2. Insert record into public.notes (or direct publish if staff)
+      let inserted: any = null;
+      if (data.isDirectPublish) {
+        const { data: rpcData, error: rpcError } = await supabase.rpc("direct_publish_note", {
+          p_subject_id: data.subjectId,
+          p_title: data.title.trim(),
+          p_tag: data.type === "PYQ" ? "PYQ" : "Lecture",
+          p_category: data.category || "Other",
+          p_storage_path: storagePath,
+          p_file_size_bytes: data.file.size,
+          p_page_count: data.pageCount || 1,
+        });
 
-      if (insertError) {
-        // Clean up orphaned storage object if database insert fails
-        await supabase.storage.from("subject-notes").remove([storagePath]);
-        return {
-          data: null,
-          error: { code: "INTERNAL", message: `Database insert failed: ${insertError.message}` },
-        };
+        if (rpcError) {
+          await supabase.storage.from("subject-notes").remove([storagePath]);
+          return {
+            data: null,
+            error: { code: "INTERNAL", message: `Direct publish failed: ${rpcError.message}` },
+          };
+        }
+        inserted = rpcData;
+      } else {
+        const { data: dbData, error: insertError } = await supabase
+          .from("notes")
+          .insert({
+            subject_id: data.subjectId,
+            user_id: user.id,
+            title: data.title.trim(),
+            description: data.category || "Other",
+            storage_path: storagePath,
+            tag: data.type === "PYQ" ? "PYQ" : "Lecture",
+            is_shared: false,
+            status: "pending",
+            file_size_bytes: data.file.size,
+            page_count: data.pageCount || 1,
+          })
+          .select("*, profiles!notes_user_id_fkey(handle, full_name)")
+          .single();
+
+        if (insertError) {
+          // Clean up orphaned storage object if database insert fails
+          await supabase.storage.from("subject-notes").remove([storagePath]);
+          return {
+            data: null,
+            error: { code: "INTERNAL", message: `Database insert failed: ${insertError.message}` },
+          };
+        }
+        inserted = dbData;
       }
 
       const note: ResourceNote = {
@@ -1087,6 +1110,57 @@ export const realCommunitiesService: CommunitiesService = {
       }
 
       return { data: true, error: null };
+    } catch (err: unknown) {
+      return { data: null, error: { code: "NETWORK", message: (err as Error).message } };
+    }
+  },
+
+  async rejectMultipleResources(
+    notes: { id: string; storagePath?: string }[],
+    reason?: string
+  ): Promise<Result<{ rejectedCount: number }>> {
+    try {
+      if (!notes || notes.length === 0) {
+        return { data: { rejectedCount: 0 }, error: null };
+      }
+
+      // 1. Purge all storage files in parallel
+      const pathsToRemove = notes
+        .map((n) => n.storagePath)
+        .filter((p): p is string => Boolean(p));
+
+      if (pathsToRemove.length > 0) {
+        const { error: storageError } = await supabase.storage
+          .from("subject-notes")
+          .remove(pathsToRemove);
+
+        if (storageError) {
+          console.warn("Batch storage removal warning:", storageError.message);
+        }
+      }
+
+      // 2. Try batch RPC first
+      const noteIds = notes.map((n) => n.id);
+      const { data: rpcCount, error: rpcError } = await supabase.rpc("reject_notes_batch", {
+        p_note_ids: noteIds,
+        p_reason: reason || null,
+      });
+
+      if (!rpcError && typeof rpcCount === "number") {
+        return { data: { rejectedCount: rpcCount }, error: null };
+      }
+
+      // Fallback: individual RPC calls if batch function not present
+      let count = 0;
+      for (const note of notes) {
+        const { error } = await supabase.rpc("reject_note", {
+          p_note_id: note.id,
+          p_reason: reason || null,
+        });
+        if (!error) count++;
+      }
+
+      return { data: { rejectedCount: count }, error: null };
     } catch (err: unknown) {
       return { data: null, error: { code: "NETWORK", message: (err as Error).message } };
     }

@@ -9,7 +9,6 @@ from core.config import settings
 
 from shared.health import router as health_router
 from features.subjects_ai.router import router as subjects_ai_router
-from features.daily_quiz.router import router as daily_quiz_router
 
 app = FastAPI(title="CampusHub API", version="0.1.0")
 
@@ -26,4 +25,3 @@ app.include_router(health_router, prefix="/api/v1")
 
 # Feature routers included with their own prefixes
 app.include_router(subjects_ai_router, prefix="/api/v1/subjects-ai", tags=["subjects-ai"])
-app.include_router(daily_quiz_router, prefix="/api/v1/daily-quiz", tags=["daily-quiz"])

@@ -1066,23 +1066,36 @@ export const mockCommunitiesService: CommunitiesService = {
     return { data: true, error: null };
   },
 
+  async rejectMultipleResources(
+    notes: { id: string; storagePath?: string }[],
+    _reason?: string
+  ): Promise<Result<{ rejectedCount: number }>> {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const targetIds = new Set(notes.map((n) => n.id));
+    const beforeCount = resources.length;
+    resources = resources.filter((r) => !targetIds.has(r.id));
+    const rejectedCount = beforeCount - resources.length;
+    return { data: { rejectedCount }, error: null };
+  },
+
   async uploadResource(data): Promise<Result<ResourceNote>> {
     await new Promise((resolve) => setTimeout(resolve, 300));
+    const isDirect = Boolean(data.isDirectPublish);
     const newResource: ResourceNote = {
       id: `r-${Date.now()}`,
       subjectId: data.subjectId,
-      userId: "mock-student-uuid",
+      userId: isDirect ? "mock-admin-uuid" : "mock-student-uuid",
       title: data.title,
       type: data.type,
       category: data.category || "Other",
-      uploaderName: "Alex Chen",
-      uploaderHandle: "Hashpotato",
+      uploaderName: isDirect ? "Sarah Vance" : "Alex Chen",
+      uploaderHandle: isDirect ? "sarah_vance" : "Hashpotato",
       pageCount: data.pageCount || (Math.floor(Math.random() * 20) + 2),
       fileSizeBytes: data.file?.size || 1500000,
-      storagePath: `staging/${data.subjectId}/${data.title}`,
+      storagePath: isDirect ? `community/${data.subjectId}/${data.title}` : `staging/${data.subjectId}/${data.title}`,
       createdAt: new Date().toISOString(),
-      status: "pending",
-      isShared: false,
+      status: isDirect ? "approved" : "pending",
+      isShared: isDirect,
     };
     resources = [newResource, ...resources];
     return { data: newResource, error: null };

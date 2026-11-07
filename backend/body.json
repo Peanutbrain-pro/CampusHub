@@ -1,7 +1,0 @@
-{
-  "subject_id": "cs303",
-  "subject_name": "Operating Systems",
-  "messages": [
-    { "role": "user", "content": "What is a deadlock?" }
-  ]
-}

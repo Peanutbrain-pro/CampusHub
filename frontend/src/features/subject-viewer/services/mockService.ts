@@ -1,5 +1,4 @@
 import type { Result } from "@/shared/result";
-import type { Subject } from "@/shared/user";
 import type { CreateTextNoteInput, SubjectNote, SubjectViewerService } from "./types";
 
 const subjectMap: Record<string, { id: string; name: string; code: string; canonicalId: string }> = {
@@ -20,27 +19,31 @@ function resolveSubjectKey(id: string): string {
 
 let notes: SubjectNote[] = [
   // DBMS
-  { id: "dbms-lec-1", subjectId: "dbms", title: "Lecture 1 — Introduction to DBMS.pdf", tag: "Lecture / Day wise", storagePath: null, content: null },
-  { id: "dbms-lec-2", subjectId: "dbms", title: "Lecture 2 — ER Modeling & Schema Design.pdf", tag: "Lecture / Day wise", storagePath: null, content: null },
-  { id: "dbms-unit-1", subjectId: "dbms", title: "Unit 1 — Relational Algebra & SQL Basics.pdf", tag: "Unit wise", storagePath: null, content: null },
-  { id: "dbms-pyq-1", subjectId: "dbms", title: "2023 End Semester Examination.pdf", tag: "PYQ", storagePath: null, content: null },
+  { id: "dbms-lec-1", subjectId: "dbms", title: "Lecture 1 — Introduction to DBMS.pdf", tag: "Lecture / Day wise", storagePath: "community/dbms/lec-1.pdf", content: null },
+  { id: "dbms-lec-2", subjectId: "dbms", title: "Lecture 2 — ER Modeling & Schema Design.pdf", tag: "Lecture / Day wise", storagePath: "community/dbms/lec-2.pdf", content: null },
+  { id: "dbms-unit-1", subjectId: "dbms", title: "Unit 1 — Relational Algebra & SQL Basics.pdf", tag: "Unit wise", storagePath: "community/dbms/unit-1.pdf", content: null },
+  { id: "dbms-pyq-1", subjectId: "dbms", title: "2023 End Semester Examination.pdf", tag: "PYQ", storagePath: "community/dbms/pyq-2023.pdf", content: null },
+  { id: "dbms-other-1", subjectId: "dbms", title: "DBMS Lab Manual & SQL Exercises.pdf", tag: "Other", storagePath: "community/dbms/lab-manual.pdf", content: null },
   { id: "dbms-priv-1", subjectId: "dbms", title: "Normalization Quick Cheatsheet", tag: "Private", storagePath: null, content: "# Normalization Revision Guide\n\n- **1NF**: Atomic attributes, no repeating groups.\n- **2NF**: In 1NF and no partial dependencies on composite keys.\n- **3NF**: In 2NF and no transitive dependencies.\n- **BCNF**: For every functional dependency $X \\to Y$, $X$ is a superkey.\n\n### Boyce-Codd Decomposition Steps\n1. Find non-trivial FD $X \\to Y$ violating BCNF.\n2. Decompose $R$ into $R_1(X \\cup Y)$ and $R_2(R - Y)$." },
 
   // Computer Networks
-  { id: "cn-lec-1", subjectId: "cn", title: "Lecture 1 — OSI 7-Layer Reference Model.pdf", tag: "Lecture / Day wise", storagePath: null, content: null },
-  { id: "cn-unit-1", subjectId: "cn", title: "Unit 2 — Subnetting and CIDR Routing.pdf", tag: "Unit wise", storagePath: null, content: null },
-  { id: "cn-pyq-1", subjectId: "cn", title: "2022 Mid Semester Exam.pdf", tag: "PYQ", storagePath: null, content: null },
+  { id: "cn-lec-1", subjectId: "cn", title: "Lecture 1 — OSI 7-Layer Reference Model.pdf", tag: "Lecture / Day wise", storagePath: "community/cn/lec-1.pdf", content: null },
+  { id: "cn-unit-1", subjectId: "cn", title: "Unit 2 — Subnetting and CIDR Routing.pdf", tag: "Unit wise", storagePath: "community/cn/unit-2.pdf", content: null },
+  { id: "cn-pyq-1", subjectId: "cn", title: "2022 Mid Semester Exam.pdf", tag: "PYQ", storagePath: "community/cn/pyq-2022.pdf", content: null },
+  { id: "cn-other-1", subjectId: "cn", title: "Packet Tracer Network Lab Setup Guide.pdf", tag: "Other", storagePath: "community/cn/packet-tracer.pdf", content: null },
   { id: "cn-priv-1", subjectId: "cn", title: "TCP Congestion Control Notes", tag: "Private", storagePath: null, content: "# TCP Congestion Control\n\n- **Slow Start**: Double CWND every RTT until threshold.\n- **Congestion Avoidance**: Additive increase (+1 MSS per RTT).\n- **Fast Retransmit**: Triggered by 3 duplicate ACKs." },
 
   // Operating Systems
-  { id: "os-lec-1", subjectId: "os", title: "Lecture 3 — Process Synchronization & Semaphores.pdf", tag: "Lecture / Day wise", storagePath: null, content: null },
-  { id: "os-unit-1", subjectId: "os", title: "Unit 3 — Virtual Memory & Page Replacement.pdf", tag: "Unit wise", storagePath: null, content: null },
-  { id: "os-pyq-1", subjectId: "os", title: "2021 End Semester Solutions.pdf", tag: "PYQ", storagePath: null, content: null },
+  { id: "os-lec-1", subjectId: "os", title: "Lecture 3 — Process Synchronization & Semaphores.pdf", tag: "Lecture / Day wise", storagePath: "community/os/lec-3.pdf", content: null },
+  { id: "os-unit-1", subjectId: "os", title: "Unit 3 — Virtual Memory & Page Replacement.pdf", tag: "Unit wise", storagePath: "community/os/unit-3.pdf", content: null },
+  { id: "os-pyq-1", subjectId: "os", title: "2021 End Semester Solutions.pdf", tag: "PYQ", storagePath: "community/os/pyq-2021.pdf", content: null },
+  { id: "os-other-1", subjectId: "os", title: "Linux Shell Scripting & Fork Cheat Sheet.pdf", tag: "Other", storagePath: "community/os/shell-cheatsheet.pdf", content: null },
 
   // Data Structures & Algorithms
-  { id: "dsa-lec-1", subjectId: "dsa", title: "Lecture 4 — Balanced Binary Search Trees (AVL/Red-Black).pdf", tag: "Lecture / Day wise", storagePath: null, content: null },
-  { id: "dsa-unit-1", subjectId: "dsa", title: "Unit 4 — Graph Algorithms (Dijkstra, Bellman-Ford).pdf", tag: "Unit wise", storagePath: null, content: null },
-  { id: "dsa-pyq-1", subjectId: "dsa", title: "2023 Mid Term PYQ.pdf", tag: "PYQ", storagePath: null, content: null },
+  { id: "dsa-lec-1", subjectId: "dsa", title: "Lecture 4 — Balanced Binary Search Trees (AVL/Red-Black).pdf", tag: "Lecture / Day wise", storagePath: "community/dsa/lec-4.pdf", content: null },
+  { id: "dsa-unit-1", subjectId: "dsa", title: "Unit 4 — Graph Algorithms (Dijkstra, Bellman-Ford).pdf", tag: "Unit wise", storagePath: "community/dsa/unit-4.pdf", content: null },
+  { id: "dsa-pyq-1", subjectId: "dsa", title: "2023 Mid Term PYQ.pdf", tag: "PYQ", storagePath: "community/dsa/pyq-2023.pdf", content: null },
+  { id: "dsa-other-1", subjectId: "dsa", title: "Asymptotic Notation Reference & Master Theorem.pdf", tag: "Other", storagePath: "community/dsa/asymptotics.pdf", content: null },
 ];
 
 const pause = () => new Promise((resolve) => setTimeout(resolve, 150));
@@ -60,6 +63,15 @@ export const mockSubjectViewerService: SubjectViewerService = {
     const canonical = resolveSubjectKey(subjectId);
     return {
       data: notes.filter((note) => resolveSubjectKey(note.subjectId) === canonical),
+      error: null,
+    };
+  },
+
+  async getDocumentUrl(storagePath: string): Promise<Result<string>> {
+    await pause();
+    // In mock mode, we simulate a signed blob or data URL
+    return {
+      data: `https://mozilla.github.io/pdf.js/web/compressed.tracemonkey-pldi-09.pdf#${encodeURIComponent(storagePath)}`,
       error: null,
     };
   },

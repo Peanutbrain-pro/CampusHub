@@ -20,19 +20,30 @@ export const realSubjectViewerService: SubjectViewerService = {
     const { data: auth } = await supabase.auth.getUser();
     const visibleNotes = (data ?? []).filter((note) => {
       // Community documents are only surfaced when an admin approved them.
-      if (["Lecture / Day wise", "Unit wise", "PYQ"].includes(note.tag)) return note.is_shared && note.status === "approved";
+      if (["Lecture / Day wise", "Unit wise", "Other", "PYQ"].includes(note.tag)) {
+        return note.is_shared && note.status === "approved";
+      }
       // "Private" remains the student's own personal text-note area.
       return note.tag === "Private" && note.user_id === auth.user?.id;
     });
-    const mapped = await Promise.all(visibleNotes.map(async (note) => {
-      let contentUrl: string | null = null;
-      if (note.tag !== "Private" && note.storage_path) {
-        const signed = await supabase.storage.from("subject-notes").createSignedUrl(note.storage_path, 60 * 30);
-        contentUrl = signed.data?.signedUrl ?? null;
-      }
-      return { id: note.id, subjectId: note.subject_id, title: note.title, tag: note.tag, storagePath: note.storage_path, content: note.content, contentUrl, createdAt: note.created_at } as SubjectNote;
-    }));
+    const mapped = visibleNotes.map((note) => ({
+      id: note.id,
+      subjectId: note.subject_id,
+      title: note.title,
+      tag: note.tag,
+      storagePath: note.storage_path,
+      content: note.content,
+      contentUrl: null,
+      createdAt: note.created_at,
+    } as SubjectNote));
     return { data: mapped, error: null };
+  },
+  async getDocumentUrl(storagePath: string): Promise<Result<string>> {
+    const signed = await supabase.storage.from("subject-notes").createSignedUrl(storagePath, 3600);
+    if (signed.error || !signed.data?.signedUrl) {
+      return { data: null, error: toError(signed.error?.message ?? "Failed to generate document access URL.") };
+    }
+    return { data: signed.data.signedUrl, error: null };
   },
   async createTextNote(input: CreateTextNoteInput): Promise<Result<SubjectNote>> {
     const { data: auth } = await supabase.auth.getUser();

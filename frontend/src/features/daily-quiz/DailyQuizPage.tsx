@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Brain,
   Flame,
@@ -38,6 +38,7 @@ export default function DailyQuizPage() {
   const [timeLeft, setTimeLeft] = useState(QUESTION_TIME);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [streak, setStreak] = useState<UserStreak | null>(null);
   const [feedbackDetails, setFeedbackDetails] = useState<
@@ -102,7 +103,7 @@ export default function DailyQuizPage() {
   }, [timeLeft, quizFinished, loading, question]);
 
   async function handleAdvance(chosenIndex: number) {
-    if (!question) return;
+    if (!question || isSubmittingRef.current) return;
 
     const updatedAnswers = {
       ...answers,
@@ -111,25 +112,42 @@ export default function DailyQuizPage() {
     setAnswers(updatedAnswers);
 
     if (currentQuestion === quizQuestions.length - 1) {
+      isSubmittingRef.current = true;
       setSubmitting(true);
-      const result = await dailyQuizService.submitQuiz(updatedAnswers);
-      setSubmitting(false);
+      try {
+        const result = await dailyQuizService.submitQuiz(updatedAnswers);
 
-      if (result.error) {
-        setErrorMessage(result.error.message);
-        return;
-      }
+        if (result.error) {
+          setErrorMessage(result.error.message);
+          return;
+        }
 
-      setScore(result.data.score);
-      if (result.data.details) {
-        setFeedbackDetails(result.data.details);
+        setScore(result.data.score);
+        if (result.data.details) {
+          setFeedbackDetails(result.data.details);
+        }
+
+        const istToday = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
+
+        setStreak((prev) =>
+          prev
+            ? {
+                ...prev,
+                currentStreak: result.data.streakCount,
+                bestStreak: Math.max(prev.bestStreak, result.data.streakCount),
+                lastCompletedDate: istToday,
+              }
+            : {
+                currentStreak: result.data.streakCount,
+                bestStreak: result.data.streakCount,
+                lastCompletedDate: istToday,
+              },
+        );
+        setQuizFinished(true);
+      } finally {
+        setSubmitting(false);
+        isSubmittingRef.current = false;
       }
-      setStreak((prev) =>
-        prev
-          ? { ...prev, currentStreak: result.data.streakCount }
-          : { currentStreak: result.data.streakCount, bestStreak: result.data.streakCount, lastCompletedDate: new Date().toISOString().slice(0, 10) },
-      );
-      setQuizFinished(true);
       return;
     }
 

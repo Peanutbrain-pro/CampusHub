@@ -324,7 +324,7 @@ Every developer owns **one isolated feature directory**. Features must never imp
 | **[`features/communities/`](src/features/communities/)** | `/communities`, `/communities/:subjectId`, `/communities/share`, `/communities/moderation` | Direct **Supabase** (`posts`, `comments`, `notes`, `vote_post` RPC, `approve_note` RPC) | *None* | **Active** |
 | **[`features/subject-viewer/`](src/features/subject-viewer/)** | `/subjects/:subjectId` (Main Canvas) | Direct **Supabase** (`subjects`, `notes`, `subject-notes` bucket) | *None* | **Scaffolded** |
 | **[`features/subject-ai-panel/`](src/features/subject-ai-panel/)** | `/subjects/:subjectId` (Right Drawer) | **FastAPI** (`/api/v1/subjects-ai/*`) | [`backend/features/subjects_ai/`](../backend/features/subjects_ai/README.md) | **Active** |
-| **[`features/daily-quiz/`](src/features/daily-quiz/)** | `/daily-quiz` | **FastAPI** `/api/v1/daily-quiz/*` + Supabase `user_streaks` | [`backend/features/daily_quiz/`](../backend/features/daily_quiz/README.md) | **Active** |
+| **[`features/daily-quiz/`](src/features/daily-quiz/)** | `/daily-quiz` | Direct **Supabase** (`get_today_quiz` & `submit_daily_quiz` RPCs, `user_streaks`) | *None* | **Active** |
 
 ---
 
