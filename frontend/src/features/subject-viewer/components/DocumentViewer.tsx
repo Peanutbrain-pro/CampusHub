@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { FileText, Save, Trash2, ShieldCheck, Lock, Loader2 } from "lucide-react";
+import { FileText, Save, Trash2, Lock, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -69,19 +69,6 @@ export function DocumentViewer({
 
     return (
       <div className="flex h-full flex-col bg-muted/15">
-        <div className="flex items-center justify-between border-b bg-background px-4 py-2 text-xs">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="font-semibold text-foreground truncate">{note.title}</span>
-            <Badge variant="secondary" className="text-[10px] shrink-0 font-medium">
-              {note.tag}
-            </Badge>
-          </div>
-          <div className="flex items-center gap-1.5 text-muted-foreground shrink-0">
-            <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-            <span className="hidden sm:inline">Approved community resource · read-only</span>
-          </div>
-        </div>
-
         {isLoadingUrl ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-2 text-muted-foreground">
             <Loader2 className="h-6 w-6 animate-spin text-primary" />
