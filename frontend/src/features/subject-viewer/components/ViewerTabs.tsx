@@ -22,13 +22,13 @@ export function ViewerTabs({
 }: Props) {
   if (tabs.length === 0) {
     return (
-      <div className="flex h-9 shrink-0 items-center border-b bg-muted/20 text-xs text-muted-foreground select-none">
+      <div className="flex h-9 shrink-0 items-center overflow-hidden border-b bg-muted/20 text-xs text-muted-foreground select-none">
         {onToggleSidebar && (
           <Button
             variant="ghost"
             size="icon"
             onClick={onToggleSidebar}
-            className="h-9 w-9 shrink-0 rounded-none border-r text-muted-foreground hover:text-foreground hover:bg-muted/50 cursor-pointer"
+            className="h-full w-9 shrink-0 rounded-none border-r text-muted-foreground hover:text-foreground hover:bg-muted/50 cursor-pointer"
             title={isSidebarOpen ? "Collapse Course Resources" : "Expand Course Resources"}
             aria-label={isSidebarOpen ? "Collapse Course Resources" : "Expand Course Resources"}
           >
@@ -45,13 +45,13 @@ export function ViewerTabs({
   }
 
   return (
-    <div className="flex h-9 shrink-0 overflow-x-auto border-b bg-muted/25 select-none no-scrollbar">
+    <div className="flex h-9 shrink-0 items-stretch overflow-x-auto overflow-y-hidden border-b bg-muted/25 select-none no-scrollbar">
       {onToggleSidebar && (
         <Button
           variant="ghost"
           size="icon"
           onClick={onToggleSidebar}
-          className="h-9 w-9 shrink-0 rounded-none border-r text-muted-foreground hover:text-foreground hover:bg-muted/50 cursor-pointer"
+          className="h-full w-9 shrink-0 rounded-none border-r text-muted-foreground hover:text-foreground hover:bg-muted/50 cursor-pointer"
           title={isSidebarOpen ? "Collapse Course Resources" : "Expand Course Resources"}
           aria-label={isSidebarOpen ? "Collapse Course Resources" : "Expand Course Resources"}
         >
@@ -67,7 +67,7 @@ export function ViewerTabs({
         return (
           <div
             key={note.id}
-            className={`group flex min-w-36 max-w-64 items-center gap-2 border-r px-3 text-xs transition-colors ${
+            className={`group flex h-full shrink-0 min-w-36 max-w-64 items-center gap-2 border-r px-3 text-xs transition-colors ${
               isActive
                 ? "bg-background text-foreground font-medium shadow-xs"
                 : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
