@@ -268,7 +268,6 @@ export default function SubjectViewerPage() {
         onOpen={open}
         onCreate={create}
         isOpen={isSidebarOpen}
-        onToggle={() => setIsSidebarOpen((prev) => !prev)}
       />
       <section className="flex min-w-0 flex-1 flex-col h-full overflow-hidden bg-background">
         <ViewerTabs

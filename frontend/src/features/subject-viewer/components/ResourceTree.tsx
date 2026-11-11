@@ -8,7 +8,6 @@ import {
   FolderOpenDot,
   Plus,
   Lock,
-  PanelLeftClose,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -27,10 +26,9 @@ interface Props {
   onOpen: (note: SubjectNote) => void;
   onCreate: () => void;
   isOpen?: boolean;
-  onToggle?: () => void;
 }
 
-export function ResourceTree({ notes, activeId, onOpen, onCreate, isOpen = true, onToggle }: Props) {
+export function ResourceTree({ notes, activeId, onOpen, onCreate, isOpen = true }: Props) {
   const [open, setOpen] = useState<Record<string, boolean>>({
     Shared: true,
     "Lecture / Day wise": true,
@@ -49,8 +47,8 @@ export function ResourceTree({ notes, activeId, onOpen, onCreate, isOpen = true,
 
   return (
     <aside
-      className={`h-full shrink-0 flex flex-col border-r bg-card select-none overflow-hidden transition-[width] duration-200 ease-in-out ${
-        isOpen ? "w-64 border-r" : "w-0 border-r-0 pointer-events-none"
+      className={`w-64 h-full shrink-0 flex flex-col bg-card select-none overflow-hidden transition-[margin-left] duration-150 ease-out will-change-[margin-left] ${
+        isOpen ? "ml-0 border-r" : "-ml-64 border-r-0 pointer-events-none"
       }`}
     >
       <div className="w-64 flex h-full flex-col min-h-0">
@@ -61,23 +59,9 @@ export function ResourceTree({ notes, activeId, onOpen, onCreate, isOpen = true,
               Course Resources
             </span>
           </div>
-          <div className="flex items-center gap-1.5">
-            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-medium">
-              {notes.length}
-            </Badge>
-            {onToggle && (
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={onToggle}
-                className="h-6 w-6 text-muted-foreground hover:text-foreground cursor-pointer"
-                title="Collapse Course Resources"
-                aria-label="Collapse Course Resources"
-              >
-                <PanelLeftClose className="h-3.5 w-3.5" />
-              </Button>
-            )}
-          </div>
+          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-medium">
+            {notes.length}
+          </Badge>
         </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-2 space-y-3">
