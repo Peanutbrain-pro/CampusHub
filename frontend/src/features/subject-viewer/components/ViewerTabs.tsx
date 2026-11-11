@@ -1,5 +1,6 @@
 import React from "react";
-import { FileText, X } from "lucide-react";
+import { FileText, X, PanelLeft, PanelLeftClose } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import type { SubjectNote } from "../services";
 
 interface Props {
@@ -7,19 +8,60 @@ interface Props {
   activeId: string | null;
   onSelect: (note: SubjectNote) => void;
   onClose: (id: string) => void;
+  isSidebarOpen?: boolean;
+  onToggleSidebar?: () => void;
 }
 
-export function ViewerTabs({ tabs, activeId, onSelect, onClose }: Props) {
+export function ViewerTabs({
+  tabs,
+  activeId,
+  onSelect,
+  onClose,
+  isSidebarOpen = true,
+  onToggleSidebar,
+}: Props) {
   if (tabs.length === 0) {
     return (
-      <div className="flex h-9 shrink-0 items-center border-b bg-muted/20 px-4 text-xs text-muted-foreground select-none">
-        <span>No documents currently open</span>
+      <div className="flex h-9 shrink-0 items-center border-b bg-muted/20 text-xs text-muted-foreground select-none">
+        {onToggleSidebar && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onToggleSidebar}
+            className="h-9 w-9 shrink-0 rounded-none border-r text-muted-foreground hover:text-foreground hover:bg-muted/50 cursor-pointer"
+            title={isSidebarOpen ? "Collapse Course Resources" : "Expand Course Resources"}
+            aria-label={isSidebarOpen ? "Collapse Course Resources" : "Expand Course Resources"}
+          >
+            {isSidebarOpen ? (
+              <PanelLeftClose className="h-4 w-4" />
+            ) : (
+              <PanelLeft className="h-4 w-4" />
+            )}
+          </Button>
+        )}
+        <span className="px-4">No documents currently open</span>
       </div>
     );
   }
 
   return (
     <div className="flex h-9 shrink-0 overflow-x-auto border-b bg-muted/25 select-none no-scrollbar">
+      {onToggleSidebar && (
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onToggleSidebar}
+          className="h-9 w-9 shrink-0 rounded-none border-r text-muted-foreground hover:text-foreground hover:bg-muted/50 cursor-pointer"
+          title={isSidebarOpen ? "Collapse Course Resources" : "Expand Course Resources"}
+          aria-label={isSidebarOpen ? "Collapse Course Resources" : "Expand Course Resources"}
+        >
+          {isSidebarOpen ? (
+            <PanelLeftClose className="h-4 w-4" />
+          ) : (
+            <PanelLeft className="h-4 w-4" />
+          )}
+        </Button>
+      )}
       {tabs.map((note) => {
         const isActive = note.id === activeId;
         return (

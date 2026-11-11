@@ -8,6 +8,7 @@ import {
   FolderOpenDot,
   Plus,
   Lock,
+  PanelLeftClose,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,9 +26,11 @@ interface Props {
   activeId: string | null;
   onOpen: (note: SubjectNote) => void;
   onCreate: () => void;
+  isOpen?: boolean;
+  onToggle?: () => void;
 }
 
-export function ResourceTree({ notes, activeId, onOpen, onCreate }: Props) {
+export function ResourceTree({ notes, activeId, onOpen, onCreate, isOpen = true, onToggle }: Props) {
   const [open, setOpen] = useState<Record<string, boolean>>({
     Shared: true,
     "Lecture / Day wise": true,
@@ -45,18 +48,37 @@ export function ResourceTree({ notes, activeId, onOpen, onCreate }: Props) {
   const sharedNotesCount = notes.filter((n) => n.tag !== "Private").length;
 
   return (
-    <aside className="flex h-full w-64 shrink-0 flex-col border-r bg-card select-none">
-      <div className="flex items-center justify-between border-b px-3.5 py-2.5">
-        <div className="flex items-center gap-2">
-          <FolderOpen className="h-4 w-4 text-primary" />
-          <span className="text-xs font-bold tracking-tight uppercase text-muted-foreground">
-            Course Resources
-          </span>
+    <aside
+      className={`h-full shrink-0 flex flex-col border-r bg-card select-none overflow-hidden transition-[width] duration-200 ease-in-out ${
+        isOpen ? "w-64 border-r" : "w-0 border-r-0 pointer-events-none"
+      }`}
+    >
+      <div className="w-64 flex h-full flex-col min-h-0">
+        <div className="flex items-center justify-between border-b px-3.5 py-2.5">
+          <div className="flex items-center gap-2">
+            <FolderOpen className="h-4 w-4 text-primary" />
+            <span className="text-xs font-bold tracking-tight uppercase text-muted-foreground">
+              Course Resources
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-medium">
+              {notes.length}
+            </Badge>
+            {onToggle && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onToggle}
+                className="h-6 w-6 text-muted-foreground hover:text-foreground cursor-pointer"
+                title="Collapse Course Resources"
+                aria-label="Collapse Course Resources"
+              >
+                <PanelLeftClose className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </div>
         </div>
-        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-medium">
-          {notes.length}
-        </Badge>
-      </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-2 space-y-3">
         {/* Shared Community Resources */}
@@ -200,6 +222,7 @@ export function ResourceTree({ notes, activeId, onOpen, onCreate }: Props) {
           <span>New Markdown Note</span>
           <Plus className="ml-auto h-3 w-3 text-muted-foreground" />
         </Button>
+      </div>
       </div>
     </aside>
   );

@@ -11,6 +11,7 @@ import { DocumentViewer } from "./components/DocumentViewer";
 import { ResourceTree } from "./components/ResourceTree";
 import { ViewerTabs } from "./components/ViewerTabs";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { usePersistentToggle } from "@/lib/use-persistent-toggle";
 import { subjectViewerService, type SubjectNote } from "./services";
 
 interface DraftNote {
@@ -26,6 +27,10 @@ interface CachedDocUrl {
 
 export default function SubjectViewerPage() {
   const { subjectId = "dbms" } = useParams();
+  const [isSidebarOpen, setIsSidebarOpen] = usePersistentToggle(
+    "campushub:sidebar:subject-resources",
+    true
+  );
   const [notes, setNotes] = useState<SubjectNote[]>([]);
   const [tabs, setTabs] = useState<SubjectNote[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -262,6 +267,8 @@ export default function SubjectViewerPage() {
         activeId={activeId}
         onOpen={open}
         onCreate={create}
+        isOpen={isSidebarOpen}
+        onToggle={() => setIsSidebarOpen((prev) => !prev)}
       />
       <section className="flex min-w-0 flex-1 flex-col h-full overflow-hidden bg-background">
         <ViewerTabs
@@ -269,6 +276,8 @@ export default function SubjectViewerPage() {
           activeId={activeId}
           onSelect={open}
           onClose={close}
+          isSidebarOpen={isSidebarOpen}
+          onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
         />
         <div className="min-h-0 flex-1 overflow-hidden">
           <DocumentViewer
