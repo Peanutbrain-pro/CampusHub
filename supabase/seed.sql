@@ -19,7 +19,8 @@ VALUES
   ('bee', 'Basic Electrical Engineering', 'EE101'),
   ('eg', 'Engineering Graphics', 'ME102'),
   ('daa', 'Design and Analysis of Algorithms', 'CS304'),
-  ('dm', 'Discrete Mathematics', 'MA202')
+  ('dm', 'Discrete Mathematics', 'MA202'),
+  ('epp', 'Engineering Professional Practice', 'HS301')
 ON CONFLICT (id) DO UPDATE SET
   name = EXCLUDED.name,
   code = EXCLUDED.code;

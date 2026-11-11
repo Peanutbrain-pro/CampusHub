@@ -1,4 +1,3 @@
-
 /**
  * @file index.ts
  * @description Selects the appropriate Daily Quiz service.
@@ -15,11 +14,4 @@ export const dailyQuizService: DailyQuizService = isMock
   ? mockDailyQuizService
   : realDailyQuizService;
 
-export type {
-  DailyQuizService,
-  QuestionFeedbackItem,
-  QuizQuestion,
-  QuizSubmissionResult,
-  TodayQuizResponse,
-  UserStreak,
-} from "./types";
+export * from "./types";

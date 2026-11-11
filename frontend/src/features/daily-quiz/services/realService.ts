@@ -12,6 +12,7 @@ import type {
   QuizQuestion,
   QuizSubmissionResult,
   TodayQuizResponse,
+  TodaySubmission,
   UserStreak,
 } from "./types";
 
@@ -40,6 +41,12 @@ interface RpcSubmitQuizResponse {
       explanation: string;
     }
   >;
+}
+
+function getIstToday(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(
+    new Date(),
+  );
 }
 
 export const realDailyQuizService: DailyQuizService = {
@@ -81,8 +88,14 @@ export const realDailyQuizService: DailyQuizService = {
   async submitQuiz(
     answers: Record<string, number>,
   ): Promise<Result<QuizSubmissionResult>> {
+    // Ensure all numeric keys are passed with numbers
+    const cleanedAnswers: Record<string, number> = {};
+    for (const [key, val] of Object.entries(answers)) {
+      cleanedAnswers[key] = typeof val === "number" ? val : -1;
+    }
+
     const { data, error } = await supabase.rpc("submit_daily_quiz", {
-      p_answers: answers,
+      p_answers: cleanedAnswers,
     });
 
     if (error) {
@@ -159,6 +172,51 @@ export const realDailyQuizService: DailyQuizService = {
         currentStreak: data?.current_streak ?? 0,
         bestStreak: data?.best_streak ?? 0,
         lastCompletedDate: data?.last_completed_date ?? null,
+      },
+      error: null,
+    };
+  },
+
+  async getTodaySubmission(): Promise<Result<TodaySubmission | null>> {
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return { data: null, error: null };
+    }
+
+    const today = getIstToday();
+
+    const { data, error } = await supabase
+      .from("daily_quiz_submissions")
+      .select("score, total_questions, answers, completed_at")
+      .eq("user_id", user.id)
+      .eq("quiz_date", today)
+      .maybeSingle();
+
+    if (error) {
+      return {
+        data: null,
+        error: {
+          code: "INTERNAL",
+          message: error.message,
+          details: error,
+        },
+      };
+    }
+
+    if (!data) {
+      return { data: null, error: null };
+    }
+
+    return {
+      data: {
+        score: data.score,
+        total: data.total_questions,
+        answers: (data.answers as Record<string, number>) || {},
+        completedAt: data.completed_at,
       },
       error: null,
     };

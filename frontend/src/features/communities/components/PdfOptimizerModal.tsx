@@ -1,9 +1,8 @@
 /**
  * @file PdfOptimizerModal.tsx
- * @description Customizable local PDF viewer & compression studio modal.
- *              Allows previewing PDF pages in real-time, selecting standard presets or
- *              freely adjusting continuous quality/resolution sliders to any custom value in between.
- *              Includes side-by-side legibility comparison, zoom/pan controls, and quota impact verification.
+ * @description Local PDF viewer & compression studio modal.
+ *              Maximizes visual preview canvas area, automatically preserves vector text,
+ *              and provides smooth 2D drag-to-pan & zoom controls.
  * @owner Communities Team
  */
 
@@ -29,17 +28,20 @@ import {
   AlertTriangle,
   Split,
   Eye,
-  Check,
+  Move,
 } from "lucide-react";
 import {
   COMPRESSION_PRESETS,
   DEFAULT_MAX_DIMENSION,
   DEFAULT_QUALITY,
   getPdfDocument,
+  inspectPdfDocument,
   renderPagePreviewDataUrl,
   compressPdf,
+  estimateDocumentSize,
   type CompressionProgress,
   type CompressionOptions,
+  type PdfAnalysis,
 } from "../utils/pdfCompressor";
 
 interface PdfOptimizerModalProps {
@@ -64,37 +66,54 @@ export function PdfOptimizerModal({
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [isLoadingDoc, setIsLoadingDoc] = useState<boolean>(false);
   const [docLoadError, setDocLoadError] = useState<string | null>(null);
+  const [pdfAnalysis, setPdfAnalysis] = useState<PdfAnalysis | null>(null);
 
-  // Compression configuration (presets + free continuous sliders)
+  // Compression settings
   const [activePresetId, setActivePresetId] = useState<string>("balanced");
   const [quality, setQuality] = useState<number>(DEFAULT_QUALITY);
   const [maxDimension, setMaxDimension] = useState<number>(DEFAULT_MAX_DIMENSION);
   const [grayscale, setGrayscale] = useState<boolean>(false);
-  const [showAdvanced, setShowAdvanced] = useState<boolean>(false);
+  const [showCustomSliders, setShowCustomSliders] = useState<boolean>(false);
 
   // Live preview state
   const [originalPreviewUrl, setOriginalPreviewUrl] = useState<string | null>(null);
   const [compressedPreviewUrl, setCompressedPreviewUrl] = useState<string | null>(null);
-  const [pageByteEstimate, setPageByteEstimate] = useState<number>(0);
   const [isRenderingPreview, setIsRenderingPreview] = useState<boolean>(false);
 
-  // Viewer controls
-  const [viewMode, setViewMode] = useState<ViewMode>("split");
+  // Document-wide stable size estimate (independent of currentPage)
+  const [docEstimate, setDocEstimate] = useState<{ totalBytes: number; savingsPercent: number }>({
+    totalBytes: file?.size || 0,
+    savingsPercent: 0,
+  });
+
+  // Viewer controls: 2D Pan & Zoom
+  const [viewMode, setViewMode] = useState<ViewMode>("single");
   const [singleTab, setSingleTab] = useState<ActivePreviewTab>("compressed");
   const [zoomScale, setZoomScale] = useState<number>(1);
+  const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState<boolean>(false);
+  const [isWheeling, setIsWheeling] = useState<boolean>(false);
 
   // Compression processing
   const [isCompressing, setIsCompressing] = useState<boolean>(false);
   const [compressionProgress, setCompressionProgress] = useState<CompressionProgress | null>(null);
 
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const estimateDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  const wheelTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const viewportRef = useRef<HTMLDivElement | null>(null);
+  const dragStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const initialPanRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
-  // 1. Load PDF Document when modal opens with a file
+  // 1. Load Document when modal opens
   useEffect(() => {
     if (!isOpen || !file) {
       setPdfDoc(null);
       setOriginalPreviewUrl(null);
       setCompressedPreviewUrl(null);
+      setPdfAnalysis(null);
+      setZoomScale(1);
+      setPan({ x: 0, y: 0 });
       return;
     }
 
@@ -102,12 +121,18 @@ export function PdfOptimizerModal({
     setIsLoadingDoc(true);
     setDocLoadError(null);
     setCurrentPage(1);
+    setZoomScale(1);
+    setPan({ x: 0, y: 0 });
 
-    getPdfDocument(file)
-      .then(({ pdfDoc: loadedDoc, numPages: totalPages }) => {
+    Promise.all([
+      getPdfDocument(file),
+      inspectPdfDocument(file).catch(() => null),
+    ])
+      .then(([{ pdfDoc: loadedDoc, numPages: totalPages }, analysis]) => {
         if (!isMounted) return;
         setPdfDoc(loadedDoc);
         setNumPages(totalPages);
+        setPdfAnalysis(analysis);
         setIsLoadingDoc(false);
       })
       .catch((err) => {
@@ -122,25 +147,54 @@ export function PdfOptimizerModal({
     };
   }, [isOpen, file]);
 
-  // 2. Render Page Previews (Original & Compressed)
+  // 2. Compute Stable Document-Wide Size Estimate (does NOT jump on page turns)
+  useEffect(() => {
+    if (!file) return;
+
+    if (estimateDebounceRef.current) {
+      clearTimeout(estimateDebounceRef.current);
+    }
+
+    estimateDebounceRef.current = setTimeout(() => {
+      estimateDocumentSize(file, pdfAnalysis, {
+        quality,
+        maxDimension,
+        grayscale,
+      })
+        .then(setDocEstimate)
+        .catch(() => {
+          setDocEstimate({ totalBytes: file.size, savingsPercent: 0 });
+        });
+    }, 150);
+
+    return () => {
+      if (estimateDebounceRef.current) clearTimeout(estimateDebounceRef.current);
+    };
+  }, [file, pdfAnalysis, quality, maxDimension, grayscale]);
+
+  // 3. Render Page Previews (High-fidelity vector text, compresses only images)
   const renderPreviews = useCallback(
     async (pageNumber: number, options: CompressionOptions) => {
       if (!pdfDoc) return;
       setIsRenderingPreview(true);
 
       try {
-        // Original page rendering (uncompressed preview)
-        const origResult = await renderPagePreviewDataUrl(pdfDoc, pageNumber, {
-          maxDimension: 2048,
-          quality: 0.95,
-          grayscale: false,
-        });
+        const origResult = await renderPagePreviewDataUrl(
+          pdfDoc,
+          pageNumber,
+          { maxDimension: 2048, quality: 0.95, grayscale: false },
+          false
+        );
         setOriginalPreviewUrl(origResult.dataUrl);
 
-        // Compressed page rendering (with current custom settings)
-        const compResult = await renderPagePreviewDataUrl(pdfDoc, pageNumber, options);
+        // Compressed preview: if page has no images, stays pure vector without JPEG ringing
+        const compResult = await renderPagePreviewDataUrl(
+          pdfDoc,
+          pageNumber,
+          options,
+          true
+        );
         setCompressedPreviewUrl(compResult.dataUrl);
-        setPageByteEstimate(compResult.byteEstimate);
       } catch (err) {
         console.error("Preview rendering error:", err);
       } finally {
@@ -150,7 +204,6 @@ export function PdfOptimizerModal({
     [pdfDoc]
   );
 
-  // Trigger preview update when page or compression options change (with debounce)
   useEffect(() => {
     if (!pdfDoc) return;
 
@@ -160,14 +213,90 @@ export function PdfOptimizerModal({
 
     debounceTimeoutRef.current = setTimeout(() => {
       renderPreviews(currentPage, { quality, maxDimension, grayscale });
-    }, 120);
+    }, 100);
 
     return () => {
       if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
     };
   }, [pdfDoc, currentPage, quality, maxDimension, grayscale, renderPreviews]);
 
-  // Handle Preset Selection
+  // 4. Smooth 2D Pan and Wheel Zoom Listener
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      setIsWheeling(true);
+      if (wheelTimeoutRef.current) clearTimeout(wheelTimeoutRef.current);
+      wheelTimeoutRef.current = setTimeout(() => setIsWheeling(false), 120);
+
+      if (e.ctrlKey) {
+        const zoomFactor = Math.exp(-e.deltaY * 0.005);
+        setZoomScale((prev) => {
+          const next = Math.min(Math.max(Number((prev * zoomFactor).toFixed(3)), 0.5), 4);
+          if (next <= 1) setPan({ x: 0, y: 0 });
+          return next;
+        });
+      } else {
+        if (zoomScale > 1) {
+          setPan((prev) => ({
+            x: prev.x - e.deltaX,
+            y: prev.y - e.deltaY,
+          }));
+        } else if (e.deltaY < 0) {
+          setZoomScale((prev) => Math.min(Number((prev + 0.2).toFixed(2)), 4));
+        } else if (e.deltaY > 0) {
+          setZoomScale((prev) => {
+            const next = Math.max(Number((prev - 0.2).toFixed(2)), 0.5);
+            if (next <= 1) setPan({ x: 0, y: 0 });
+            return next;
+          });
+        }
+      }
+    };
+
+    viewport.addEventListener("wheel", handleWheel, { passive: false });
+    return () => {
+      viewport.removeEventListener("wheel", handleWheel);
+      if (wheelTimeoutRef.current) clearTimeout(wheelTimeoutRef.current);
+    };
+  }, [zoomScale]);
+
+  // Mouse Drag to Pan
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (zoomScale <= 1 && e.button !== 1) return;
+    setIsDragging(true);
+    dragStartRef.current = { x: e.clientX, y: e.clientY };
+    initialPanRef.current = { ...pan };
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging) return;
+    const dx = e.clientX - dragStartRef.current.x;
+    const dy = e.clientY - dragStartRef.current.y;
+    setPan({
+      x: initialPanRef.current.x + dx,
+      y: initialPanRef.current.y + dy,
+    });
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  const handleDoubleClick = () => {
+    if (zoomScale > 1) {
+      setZoomScale(1);
+      setPan({ x: 0, y: 0 });
+    } else {
+      setZoomScale(1.75);
+    }
+  };
+
+  // Preset Selection
   const handleSelectPreset = (presetId: string) => {
     const preset = COMPRESSION_PRESETS.find((p) => p.id === presetId);
     if (!preset) return;
@@ -176,42 +305,6 @@ export function PdfOptimizerModal({
     setMaxDimension(preset.maxDimension);
     setGrayscale(preset.grayscale);
   };
-
-  // Handle Free Slider Changes (Custom adjustment to any value in between)
-  const handleQualityChange = (val: number) => {
-    setActivePresetId("custom");
-    setQuality(val);
-  };
-
-  const handleMaxDimensionChange = (val: number) => {
-    setActivePresetId("custom");
-    setMaxDimension(val);
-  };
-
-  const handleGrayscaleToggle = (checked: boolean) => {
-    setActivePresetId("custom");
-    setGrayscale(checked);
-  };
-
-  // Zoom handlers
-  const handleZoomIn = () => setZoomScale((prev) => Math.min(prev + 0.25, 3));
-  const handleZoomOut = () => setZoomScale((prev) => Math.max(prev - 0.25, 0.5));
-  const handleResetZoom = () => setZoomScale(1);
-
-  // Page navigation
-  const handlePrevPage = () => setCurrentPage((p) => Math.max(1, p - 1));
-  const handleNextPage = () => setCurrentPage((p) => Math.min(numPages, p + 1));
-
-  // Estimated full document size based on single page render sample
-  const estimatedTotalBytes = Math.max(
-    1024,
-    Math.round(pageByteEstimate * numPages * 1.05)
-  );
-  const originalBytes = file?.size || 0;
-  const estimatedSavingsPercent = Math.max(
-    0,
-    Math.min(95, Math.round(((originalBytes - estimatedTotalBytes) / originalBytes) * 100))
-  );
 
   const formatSize = (bytes: number) => {
     if (bytes >= 1024 * 1024) {
@@ -226,7 +319,7 @@ export function PdfOptimizerModal({
 
     try {
       setIsCompressing(true);
-      setCompressionProgress({ percent: 0, step: "Starting compression..." });
+      setCompressionProgress({ percent: 0, step: "Compressing..." });
 
       const result = await compressPdf(
         file,
@@ -249,194 +342,202 @@ export function PdfOptimizerModal({
 
   if (!isOpen) return null;
 
+  const originalBytes = file?.size || 0;
+
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && !isCompressing && onClose()}>
       <DialogContent className="max-w-5xl! w-[95vw] h-[92vh] max-h-[92vh] p-0 flex flex-col gap-0 overflow-hidden bg-background border shadow-2xl">
-        {/* Header */}
-        <DialogHeader className="px-5 py-3 border-b shrink-0 flex flex-row items-center justify-between space-y-0 bg-muted/20">
-          <div className="flex items-center gap-3">
-            <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
-              <Sparkles className="h-4 w-4" />
-            </div>
-            <div>
-              <DialogTitle className="text-sm font-semibold flex items-center gap-2">
-                <span>PDF Compression Studio & Preview</span>
-                {file && (
-                  <Badge variant="outline" className="text-[11px] font-normal px-2 py-0">
-                    {formatSize(originalBytes)}
-                  </Badge>
-                )}
-                {numPages > 0 && (
-                  <Badge variant="secondary" className="text-[11px] font-normal px-2 py-0">
-                    {numPages} {numPages === 1 ? "page" : "pages"}
-                  </Badge>
-                )}
-              </DialogTitle>
-              <p className="text-[11px] text-muted-foreground truncate max-w-md">
-                {file?.name || "Document"}
-              </p>
-            </div>
+        {/* Minimal Header (Single Line) */}
+        <DialogHeader className="px-5 py-2.5 border-b shrink-0 flex flex-row items-center justify-between space-y-0 bg-muted/20">
+          <div className="flex items-center gap-2.5">
+            <Sparkles className="h-4 w-4 text-primary" />
+            <DialogTitle className="text-sm font-semibold flex items-center gap-2">
+              <span className="truncate max-w-xs sm:max-w-md">{file?.name || "Document"}</span>
+              {file && (
+                <Badge variant="outline" className="text-[11px] font-normal px-2 py-0">
+                  {formatSize(originalBytes)}
+                </Badge>
+              )}
+              {numPages > 0 && (
+                <Badge variant="secondary" className="text-[11px] font-normal px-2 py-0">
+                  {numPages} {numPages === 1 ? "page" : "pages"}
+                </Badge>
+              )}
+            </DialogTitle>
           </div>
         </DialogHeader>
 
-        {/* Studio Body: Top Controls & Viewer */}
-        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-          {/* Controls Bar: Presets & Continuous Sliders */}
-          <div className="px-5 py-2.5 border-b bg-card/60 space-y-2 shrink-0">
-            {/* Row 1: Presets + Quick toggles */}
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[11px] font-semibold text-muted-foreground mr-1">
-                  Preset:
-                </span>
-                {COMPRESSION_PRESETS.map((preset) => {
-                  const isSelected = activePresetId === preset.id;
-                  return (
-                    <button
-                      key={preset.id}
-                      type="button"
-                      onClick={() => handleSelectPreset(preset.id)}
-                      className={`text-xs px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer border ${
-                        isSelected
-                          ? "bg-primary text-primary-foreground border-primary shadow-xs"
-                          : "bg-background text-muted-foreground hover:text-foreground border-border hover:bg-muted/50"
-                      }`}
-                      title={preset.description}
-                    >
-                      {preset.shortLabel}
-                    </button>
-                  );
-                })}
-
+        {/* Compact Single-Row Controls Bar */}
+        <div className="px-5 py-2 border-b bg-card/60 flex flex-wrap items-center justify-between gap-2 shrink-0 text-xs">
+          {/* Presets & Custom Sliders Button */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[11px] font-semibold text-muted-foreground mr-1">Preset:</span>
+            {COMPRESSION_PRESETS.map((preset) => {
+              const isSelected = activePresetId === preset.id;
+              return (
                 <button
+                  key={preset.id}
                   type="button"
-                  onClick={() => setShowAdvanced(!showAdvanced)}
-                  className={`text-xs px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer border flex items-center gap-1.5 ${
-                    activePresetId === "custom" || showAdvanced
-                      ? "bg-secondary text-foreground border-primary/50"
-                      : "bg-background text-muted-foreground hover:text-foreground border-border"
+                  onClick={() => handleSelectPreset(preset.id)}
+                  className={`px-2.5 py-1 text-xs rounded-md font-medium transition-all cursor-pointer border ${
+                    isSelected
+                      ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                      : "bg-background text-muted-foreground hover:text-foreground border-border hover:bg-muted/50"
                   }`}
+                  title={preset.description}
                 >
-                  <Sliders className="h-3 w-3" />
-                  <span>Custom Sliders</span>
+                  {preset.shortLabel}
                 </button>
-              </div>
+              );
+            })}
 
-              {/* Size metrics & Quota badge */}
-              <div className="flex items-center gap-2 text-xs">
-                <div className="flex items-center gap-1.5 bg-muted/50 border px-2.5 py-1 rounded-md">
-                  <span className="text-muted-foreground text-[11px]">Est. Size:</span>
-                  <span className="font-semibold text-foreground">
-                    ~{formatSize(estimatedTotalBytes)}
-                  </span>
-                  {estimatedSavingsPercent > 0 && (
-                    <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1 rounded">
-                      -{estimatedSavingsPercent}%
-                    </span>
-                  )}
-                </div>
-
-                {estimatedTotalBytes <= 5 * 1024 * 1024 ? (
-                  <Badge variant="outline" className="text-[11px] text-emerald-600 border-emerald-500/30 gap-1 bg-emerald-500/5">
-                    <CheckCircle2 className="h-3 w-3" />
-                    Fits &lt; 5 MB
-                  </Badge>
-                ) : (
-                  <Badge variant="destructive" className="text-[11px] gap-1">
-                    <AlertTriangle className="h-3 w-3" />
-                    Exceeds 5 MB
-                  </Badge>
-                )}
-              </div>
-            </div>
-
-            {/* Row 2: Sliders (Quality, Max Dimension, Grayscale) */}
-            <div className="pt-1.5 border-t border-border/40 grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-              {/* Quality Slider (10% to 100%) */}
-              <div className="flex flex-col gap-1">
-                <div className="flex justify-between text-[11px]">
-                  <span className="text-muted-foreground">Quality</span>
-                  <span className="font-semibold text-foreground">
-                    {Math.round(quality * 100)}%
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  min="0.15"
-                  max="0.95"
-                  step="0.01"
-                  value={quality}
-                  onChange={(e) => handleQualityChange(parseFloat(e.target.value))}
-                  className="w-full accent-primary h-1.5 bg-secondary rounded-lg cursor-pointer"
-                />
-              </div>
-
-              {/* Max Resolution / Dimension Slider (800px to 2200px) */}
-              <div className="flex flex-col gap-1">
-                <div className="flex justify-between text-[11px]">
-                  <span className="text-muted-foreground">Max Resolution</span>
-                  <span className="font-semibold text-foreground">{maxDimension}px</span>
-                </div>
-                <input
-                  type="range"
-                  min="800"
-                  max="2200"
-                  step="50"
-                  value={maxDimension}
-                  onChange={(e) => handleMaxDimensionChange(parseInt(e.target.value, 10))}
-                  className="w-full accent-primary h-1.5 bg-secondary rounded-lg cursor-pointer"
-                />
-              </div>
-
-              {/* Grayscale Toggle */}
-              <div className="flex items-center justify-between sm:justify-start gap-3 pt-2 sm:pt-0">
-                <label className="flex items-center gap-2 cursor-pointer select-none text-[11px] font-medium text-muted-foreground hover:text-foreground">
-                  <input
-                    type="checkbox"
-                    checked={grayscale}
-                    onChange={(e) => handleGrayscaleToggle(e.target.checked)}
-                    className="accent-primary rounded h-3.5 w-3.5"
-                  />
-                  <span>Monochrome (B&W Extra Compression)</span>
-                </label>
-              </div>
-            </div>
+            <button
+              type="button"
+              onClick={() => setShowCustomSliders(!showCustomSliders)}
+              className={`px-2.5 py-1 text-xs rounded-md font-medium transition-all cursor-pointer border flex items-center gap-1.5 ${
+                showCustomSliders
+                  ? "bg-secondary text-foreground border-primary/50"
+                  : "bg-background text-muted-foreground hover:text-foreground border-border"
+              }`}
+            >
+              <Sliders className="h-3 w-3" />
+              <span>Sliders</span>
+            </button>
           </div>
 
-          {/* Viewer Toolbar: Navigation, Zoom & View Mode */}
-          <div className="px-5 py-2 border-b bg-muted/10 flex flex-wrap items-center justify-between gap-2 shrink-0 text-xs">
-            {/* Page Navigation */}
-            <div className="flex items-center gap-1.5">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handlePrevPage}
-                disabled={currentPage <= 1 || isCompressing}
-                className="h-7 w-7 p-0"
-              >
-                <ChevronLeft className="h-3.5 w-3.5" />
-              </Button>
-              <span className="text-[11px] font-medium px-1 text-muted-foreground">
-                Page <span className="text-foreground font-semibold">{currentPage}</span> of{" "}
-                <span className="text-foreground font-semibold">{numPages}</span>
+          {/* Stable Document-Wide Size Metric */}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 bg-muted/50 border px-2.5 py-1 rounded-md">
+              <span className="text-muted-foreground text-[11px]">Est. Total:</span>
+              <span className="font-semibold text-foreground">
+                ~{formatSize(docEstimate.totalBytes)}
               </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleNextPage}
-                disabled={currentPage >= numPages || isCompressing}
-                className="h-7 w-7 p-0"
-              >
-                <ChevronRight className="h-3.5 w-3.5" />
-              </Button>
+              {docEstimate.savingsPercent > 0 && (
+                <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1 rounded">
+                  -{docEstimate.savingsPercent}%
+                </span>
+              )}
             </div>
 
-            {/* View Mode Toggle: Split vs Single */}
-            <div className="flex items-center bg-secondary/80 rounded-md p-0.5 border">
+            {docEstimate.totalBytes <= 5 * 1024 * 1024 ? (
+              <Badge variant="outline" className="text-[11px] text-emerald-600 border-emerald-500/30 gap-1 bg-emerald-500/5">
+                <CheckCircle2 className="h-3 w-3" />
+                Fits &lt; 5 MB
+              </Badge>
+            ) : (
+              <Badge variant="destructive" className="text-[11px] gap-1">
+                <AlertTriangle className="h-3 w-3" />
+                Exceeds 5 MB
+              </Badge>
+            )}
+          </div>
+        </div>
+
+        {/* Collapsible Sliders Drawer (Only when clicked) */}
+        {showCustomSliders && (
+          <div className="px-5 py-2 border-b bg-card/40 grid grid-cols-1 md:grid-cols-3 gap-3 text-xs shrink-0">
+            <div className="flex flex-col gap-1">
+              <div className="flex justify-between text-[11px]">
+                <span className="text-muted-foreground">Quality</span>
+                <span className="font-semibold text-foreground">{Math.round(quality * 100)}%</span>
+              </div>
+              <input
+                type="range"
+                min="0.15"
+                max="0.95"
+                step="0.01"
+                value={quality}
+                onChange={(e) => {
+                  setActivePresetId("custom");
+                  setQuality(parseFloat(e.target.value));
+                }}
+                className="w-full accent-primary h-1.5 bg-secondary rounded-lg cursor-pointer"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <div className="flex justify-between text-[11px]">
+                <span className="text-muted-foreground">Max Resolution</span>
+                <span className="font-semibold text-foreground">{maxDimension}px</span>
+              </div>
+              <input
+                type="range"
+                min="800"
+                max="2200"
+                step="50"
+                value={maxDimension}
+                onChange={(e) => {
+                  setActivePresetId("custom");
+                  setMaxDimension(parseInt(e.target.value, 10));
+                }}
+                className="w-full accent-primary h-1.5 bg-secondary rounded-lg cursor-pointer"
+              />
+            </div>
+
+            <div className="flex items-center justify-start gap-2 pt-2 md:pt-0">
+              <label className="flex items-center gap-2 cursor-pointer select-none text-[11px] font-medium text-muted-foreground hover:text-foreground">
+                <input
+                  type="checkbox"
+                  checked={grayscale}
+                  onChange={(e) => {
+                    setActivePresetId("custom");
+                    setGrayscale(e.target.checked);
+                  }}
+                  className="accent-primary rounded h-3.5 w-3.5"
+                />
+                <span>Monochrome (Grayscale)</span>
+              </label>
+            </div>
+          </div>
+        )}
+
+        {/* Slim Floating Toolbar for Navigation & Zoom */}
+        <div className="px-5 py-1.5 border-b bg-muted/10 flex items-center justify-between gap-2 shrink-0 text-xs">
+          {/* Page Navigation */}
+          <div className="flex items-center gap-1.5">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage <= 1 || isCompressing}
+              className="h-6 w-6 p-0"
+            >
+              <ChevronLeft className="h-3 w-3" />
+            </Button>
+            <span className="text-[11px] font-medium px-1 text-muted-foreground">
+              Page <span className="text-foreground font-semibold">{currentPage}</span> of{" "}
+              <span className="text-foreground font-semibold">{numPages}</span>
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage((p) => Math.min(numPages, p + 1))}
+              disabled={currentPage >= numPages || isCompressing}
+              className="h-6 w-6 p-0"
+            >
+              <ChevronRight className="h-3 w-3" />
+            </Button>
+          </div>
+
+          {/* View Mode: Single vs Split */}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center bg-secondary/80 rounded p-0.5 border">
+              <button
+                type="button"
+                onClick={() => setViewMode("single")}
+                className={`px-2 py-0.5 text-[11px] font-medium rounded flex items-center gap-1 cursor-pointer transition-all ${
+                  viewMode === "single"
+                    ? "bg-background text-foreground shadow-xs font-semibold"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <Eye className="h-3 w-3" />
+                <span>Single</span>
+              </button>
               <button
                 type="button"
                 onClick={() => setViewMode("split")}
-                className={`px-2 py-1 text-[11px] font-medium rounded flex items-center gap-1 cursor-pointer transition-all ${
+                className={`px-2 py-0.5 text-[11px] font-medium rounded flex items-center gap-1 cursor-pointer transition-all ${
                   viewMode === "split"
                     ? "bg-background text-foreground shadow-xs font-semibold"
                     : "text-muted-foreground hover:text-foreground"
@@ -445,30 +546,17 @@ export function PdfOptimizerModal({
                 <Split className="h-3 w-3" />
                 <span>Side-by-Side</span>
               </button>
-              <button
-                type="button"
-                onClick={() => setViewMode("single")}
-                className={`px-2 py-1 text-[11px] font-medium rounded flex items-center gap-1 cursor-pointer transition-all ${
-                  viewMode === "single"
-                    ? "bg-background text-foreground shadow-xs font-semibold"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <Eye className="h-3 w-3" />
-                <span>Single Toggle</span>
-              </button>
             </div>
 
-            {/* Single Mode Tab Selector (if in single view) */}
             {viewMode === "single" && (
-              <div className="flex items-center gap-1 text-[11px]">
+              <div className="flex items-center bg-secondary/80 rounded p-0.5 border">
                 <button
                   type="button"
                   onClick={() => setSingleTab("original")}
-                  className={`px-2 py-1 rounded cursor-pointer ${
+                  className={`px-2 py-0.5 text-[11px] font-medium rounded cursor-pointer transition-all ${
                     singleTab === "original"
                       ? "bg-primary text-primary-foreground font-semibold"
-                      : "bg-muted text-muted-foreground hover:text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   Original
@@ -476,144 +564,189 @@ export function PdfOptimizerModal({
                 <button
                   type="button"
                   onClick={() => setSingleTab("compressed")}
-                  className={`px-2 py-1 rounded cursor-pointer ${
+                  className={`px-2 py-0.5 text-[11px] font-medium rounded cursor-pointer transition-all ${
                     singleTab === "compressed"
                       ? "bg-primary text-primary-foreground font-semibold"
-                      : "bg-muted text-muted-foreground hover:text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   Compressed
                 </button>
               </div>
             )}
-
-            {/* Zoom Controls */}
-            <div className="flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleZoomOut}
-                disabled={zoomScale <= 0.5}
-                className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
-                title="Zoom Out"
-              >
-                <ZoomOut className="h-3.5 w-3.5" />
-              </Button>
-              <span className="text-[11px] font-mono text-muted-foreground w-11 text-center">
-                {Math.round(zoomScale * 100)}%
-              </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleZoomIn}
-                disabled={zoomScale >= 3.0}
-                className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
-                title="Zoom In"
-              >
-                <ZoomIn className="h-3.5 w-3.5" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleResetZoom}
-                className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
-                title="Reset Zoom (100%)"
-              >
-                <RotateCcw className="h-3 w-3" />
-              </Button>
-            </div>
           </div>
 
-          {/* Main Visual Preview Area */}
-          <div className="flex-1 overflow-auto bg-neutral-900/90 dark:bg-black/95 p-4 flex items-center justify-center relative select-none">
-            {isLoadingDoc ? (
-              <div className="flex flex-col items-center justify-center gap-2 text-neutral-300">
-                <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                <span className="text-xs">Loading PDF document locally...</span>
-              </div>
-            ) : docLoadError ? (
-              <div className="flex flex-col items-center justify-center gap-2 text-destructive max-w-sm text-center">
-                <AlertTriangle className="h-8 w-8" />
-                <span className="text-xs font-medium">{docLoadError}</span>
-              </div>
-            ) : (
-              <div
-                className="transition-transform duration-100 ease-out flex items-center justify-center"
-                style={{ transform: `scale(${zoomScale})`, transformOrigin: "center center" }}
-              >
-                {viewMode === "split" ? (
-                  <div className="flex flex-row items-start gap-4">
-                    {/* Left: Original Page */}
-                    <div className="flex flex-col items-center gap-1.5">
-                      <div className="bg-neutral-800 text-neutral-300 text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded shadow">
-                        Original (High Fidelity)
-                      </div>
-                      <div className="bg-white rounded-md shadow-2xl overflow-hidden border border-neutral-700 max-w-[420px] max-h-[580px] flex items-center justify-center">
-                        {originalPreviewUrl ? (
-                          <img
-                            src={originalPreviewUrl}
-                            alt={`Original Page ${currentPage}`}
-                            className="max-w-full max-h-[580px] object-contain block"
-                          />
-                        ) : (
-                          <div className="w-[380px] h-[520px] flex items-center justify-center">
-                            <Loader2 className="h-5 w-5 animate-spin text-neutral-400" />
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Right: Compressed Page */}
-                    <div className="flex flex-col items-center gap-1.5">
-                      <div className="bg-primary/90 text-primary-foreground text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded shadow flex items-center gap-1">
-                        <span>Compressed Preview</span>
-                        {isRenderingPreview && <Loader2 className="h-2.5 w-2.5 animate-spin" />}
-                      </div>
-                      <div className="bg-white rounded-md shadow-2xl overflow-hidden border border-neutral-700 max-w-[420px] max-h-[580px] flex items-center justify-center">
-                        {compressedPreviewUrl ? (
-                          <img
-                            src={compressedPreviewUrl}
-                            alt={`Compressed Page ${currentPage}`}
-                            className="max-w-full max-h-[580px] object-contain block"
-                          />
-                        ) : (
-                          <div className="w-[380px] h-[520px] flex items-center justify-center">
-                            <Loader2 className="h-5 w-5 animate-spin text-neutral-400" />
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  /* Single Toggle View */
-                  <div className="flex flex-col items-center gap-1.5">
-                    <div className="bg-neutral-800 text-neutral-200 text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded shadow flex items-center gap-1">
-                      <span>
-                        {singleTab === "original" ? "Original Page" : "Compressed Preview"}
-                      </span>
-                      {isRenderingPreview && <Loader2 className="h-2.5 w-2.5 animate-spin" />}
-                    </div>
-                    <div className="bg-white rounded-md shadow-2xl overflow-hidden border border-neutral-700 max-w-[620px] max-h-[640px] flex items-center justify-center">
-                      <img
-                        src={
-                          singleTab === "original"
-                            ? originalPreviewUrl || ""
-                            : compressedPreviewUrl || ""
-                        }
-                        alt={`Page ${currentPage}`}
-                        className="max-w-full max-h-[640px] object-contain block"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
+          {/* Zoom Controls */}
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() =>
+                setZoomScale((prev) => {
+                  const next = Math.max(prev - 0.25, 0.5);
+                  if (next <= 1) setPan({ x: 0, y: 0 });
+                  return next;
+                })
+              }
+              disabled={zoomScale <= 0.5}
+              className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+              title="Zoom Out"
+            >
+              <ZoomOut className="h-3 w-3" />
+            </Button>
+            <span className="text-[11px] font-mono text-muted-foreground w-10 text-center">
+              {Math.round(zoomScale * 100)}%
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setZoomScale((prev) => Math.min(prev + 0.25, 4))}
+              disabled={zoomScale >= 4.0}
+              className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+              title="Zoom In"
+            >
+              <ZoomIn className="h-3 w-3" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setZoomScale(1);
+                setPan({ x: 0, y: 0 });
+              }}
+              className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+              title="Reset Zoom & Pan (100%)"
+            >
+              <RotateCcw className="h-3 w-3" />
+            </Button>
           </div>
         </div>
 
-        {/* Footer: Progress indicator & Actions */}
-        <div className="px-5 py-3 border-t bg-card shrink-0 flex items-center justify-between gap-3">
-          {/* Left: Compression progress */}
+        {/* Maximized Visual Preview Canvas (Fills entire remaining window) */}
+        <div
+          ref={viewportRef}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
+          onDoubleClick={handleDoubleClick}
+          className="flex-1 overflow-hidden bg-neutral-900/95 dark:bg-black p-3 sm:p-4 flex items-center justify-center relative select-none"
+          style={{
+            cursor: zoomScale > 1 ? (isDragging ? "grabbing" : "grab") : "default",
+          }}
+        >
+          {isLoadingDoc ? (
+            <div className="flex flex-col items-center justify-center gap-2 text-neutral-300">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              <span className="text-xs">Loading PDF document...</span>
+            </div>
+          ) : docLoadError ? (
+            <div className="flex flex-col items-center justify-center gap-2 text-destructive max-w-sm text-center">
+              <AlertTriangle className="h-8 w-8" />
+              <span className="text-xs font-medium">{docLoadError}</span>
+            </div>
+          ) : (
+            <div
+              className="flex items-center justify-center will-change-transform max-h-full max-w-full"
+              style={{
+                transform: `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoomScale})`,
+                transformOrigin: "center center",
+                transition: isDragging || isWheeling ? "none" : "transform 140ms ease-out",
+              }}
+            >
+              {viewMode === "split" ? (
+                /* Side-by-Side View */
+                <div className="flex flex-row items-center justify-center gap-4 sm:gap-6 max-h-full max-w-full">
+                  {/* Left: Original */}
+                  <div className="flex flex-col items-center gap-1.5">
+                    <span className="text-[10px] uppercase tracking-wider font-semibold text-neutral-400 bg-neutral-800/80 px-2 py-0.5 rounded shadow">
+                      Original
+                    </span>
+                    <div className="flex items-center justify-center">
+                      {originalPreviewUrl ? (
+                        <img
+                          src={originalPreviewUrl}
+                          alt={`Original Page ${currentPage}`}
+                          className="h-[calc(88vh-200px)] max-h-full w-auto max-w-[45vw] object-contain shadow-2xl rounded border border-neutral-700 bg-white block pointer-events-none"
+                          draggable={false}
+                        />
+                      ) : (
+                        <div className="w-[380px] h-[calc(88vh-200px)] flex items-center justify-center bg-neutral-800/50 rounded">
+                          <Loader2 className="h-6 w-6 animate-spin text-neutral-400" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Right: Compressed */}
+                  <div className="flex flex-col items-center gap-1.5">
+                    <span className="text-[10px] uppercase tracking-wider font-semibold text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded shadow flex items-center gap-1">
+                      <span>Compressed</span>
+                      {isRenderingPreview && <Loader2 className="h-2.5 w-2.5 animate-spin" />}
+                    </span>
+                    <div className="flex items-center justify-center">
+                      {compressedPreviewUrl ? (
+                        <img
+                          src={compressedPreviewUrl}
+                          alt={`Compressed Page ${currentPage}`}
+                          className="h-[calc(88vh-200px)] max-h-full w-auto max-w-[45vw] object-contain shadow-2xl rounded border border-neutral-700 bg-white block pointer-events-none"
+                          draggable={false}
+                        />
+                      ) : (
+                        <div className="w-[380px] h-[calc(88vh-200px)] flex items-center justify-center bg-neutral-800/50 rounded">
+                          <Loader2 className="h-6 w-6 animate-spin text-neutral-400" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                /* Single Page View (Immersive & Large) */
+                <div className="flex flex-col items-center justify-center gap-1.5 max-h-full max-w-full">
+                  <div className="flex items-center justify-center">
+                    {singleTab === "original" ? (
+                      originalPreviewUrl ? (
+                        <img
+                          src={originalPreviewUrl}
+                          alt={`Original Page ${currentPage}`}
+                          className="h-[calc(88vh-180px)] max-h-full w-auto max-w-[85vw] object-contain shadow-2xl rounded border border-neutral-700 bg-white block pointer-events-none"
+                          draggable={false}
+                        />
+                      ) : (
+                        <div className="w-[450px] h-[calc(88vh-180px)] flex items-center justify-center bg-neutral-800/50 rounded">
+                          <Loader2 className="h-6 w-6 animate-spin text-neutral-400" />
+                        </div>
+                      )
+                    ) : compressedPreviewUrl ? (
+                      <img
+                        src={compressedPreviewUrl}
+                        alt={`Compressed Page ${currentPage}`}
+                        className="h-[calc(88vh-180px)] max-h-full w-auto max-w-[85vw] object-contain shadow-2xl rounded border border-neutral-700 bg-white block pointer-events-none"
+                        draggable={false}
+                      />
+                    ) : (
+                      <div className="w-[450px] h-[calc(88vh-180px)] flex items-center justify-center bg-neutral-800/50 rounded">
+                        <Loader2 className="h-6 w-6 animate-spin text-neutral-400" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Floating Pan Hint when Zoomed */}
+          {zoomScale > 1 && (
+            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-black/75 text-neutral-300 text-[10px] px-2.5 py-1 rounded-full shadow pointer-events-none flex items-center gap-1.5 backdrop-blur-xs">
+              <Move className="h-3 w-3 text-primary" />
+              <span>Drag to pan • Double-click to reset</span>
+            </div>
+          )}
+        </div>
+
+        {/* Minimal Footer */}
+        <div className="px-5 py-2.5 border-t bg-card shrink-0 flex items-center justify-between gap-3">
+          {/* Progress Indicator */}
           <div className="flex-1 max-w-sm">
             {isCompressing && compressionProgress ? (
               <div className="space-y-1">
@@ -631,32 +764,24 @@ export function PdfOptimizerModal({
                   />
                 </div>
               </div>
-            ) : (
-              <div className="text-[11px] text-muted-foreground flex items-center gap-1.5">
-                <Check className="h-3.5 w-3.5 text-emerald-500" />
-                <span>All compression and rendering happen locally in your browser.</span>
-              </div>
-            )}
+            ) : null}
           </div>
 
-          {/* Right: Actions */}
+          {/* Actions */}
           <div className="flex items-center gap-2">
             <Button
-              type="button"
               variant="outline"
               size="sm"
               onClick={onClose}
               disabled={isCompressing}
-              className="text-xs h-8"
             >
               Cancel
             </Button>
             <Button
-              type="button"
               size="sm"
               onClick={handleApply}
-              disabled={isCompressing || isLoadingDoc || !pdfDoc}
-              className="text-xs h-8 gap-1.5 font-semibold"
+              disabled={isCompressing || isLoadingDoc || Boolean(docLoadError)}
+              className="gap-1.5 font-medium"
             >
               {isCompressing ? (
                 <>
@@ -667,7 +792,8 @@ export function PdfOptimizerModal({
                 <>
                   <Sparkles className="h-3.5 w-3.5" />
                   <span>
-                    Apply Optimization (~{formatSize(estimatedTotalBytes)})
+                    Apply Compression
+                    {docEstimate.savingsPercent > 0 ? ` (-${docEstimate.savingsPercent}%)` : ""}
                   </span>
                 </>
               )}
@@ -678,4 +804,3 @@ export function PdfOptimizerModal({
     </Dialog>
   );
 }
-

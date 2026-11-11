@@ -1,41 +1,47 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import {
   Brain,
   Flame,
   CheckCircle2,
-  XCircle,
   RotateCcw,
-  ArrowRight,
   Trophy,
-  Clock,
   AlertCircle,
+  BookOpen,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+
+import {
+  StreakBadge,
+  QuizTimer,
+  QuizPlayer,
+  ResultModal,
+  ExplanationDrawer,
+} from "./components";
+
 import { dailyQuizService } from "./services";
 import type {
   QuestionFeedbackItem,
   QuizQuestion,
   UserStreak,
+  TodaySubmission,
 } from "./services";
 
-const QUESTION_TIME = 30;
+const TOTAL_QUIZ_TIME_SECONDS = 300; // 5 minutes total
 
 export default function DailyQuizPage() {
   const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
-  const [currentQuestion, setCurrentQuestion] = useState(0);
-  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [score, setScore] = useState(0);
   const [quizFinished, setQuizFinished] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(QUESTION_TIME);
+  const [timeLeft, setTimeLeft] = useState(TOTAL_QUIZ_TIME_SECONDS);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const isSubmittingRef = useRef(false);
@@ -45,53 +51,141 @@ export default function DailyQuizPage() {
     Record<string, QuestionFeedbackItem>
   >({});
   const [alreadyCompletedToday, setAlreadyCompletedToday] = useState(false);
+  const [todaySubmission, setTodaySubmission] = useState<TodaySubmission | null>(null);
+  const [isResultModalOpen, setIsResultModalOpen] = useState(false);
+  const [isExplanationDrawerOpen, setIsExplanationDrawerOpen] = useState(false);
 
-  const question = quizQuestions[currentQuestion];
+  const isMock = import.meta.env.VITE_USE_MOCKS === "true";
 
-  async function loadQuiz() {
+  const loadQuiz = useCallback(async () => {
     setLoading(true);
     setErrorMessage("");
     setAlreadyCompletedToday(false);
+    setTodaySubmission(null);
+    setIsResultModalOpen(false);
+    setIsExplanationDrawerOpen(false);
 
-    const result = await dailyQuizService.getTodayQuiz();
+    // 1. Fetch today's assigned quiz questions
+    const quizResult = await dailyQuizService.getTodayQuiz();
 
-    if (result.error) {
-      setErrorMessage(result.error.message);
+    if (quizResult.error) {
+      setErrorMessage(quizResult.error.message);
       setLoading(false);
       return;
     }
 
-    if (result.data.alreadySubmitted) {
-      setAlreadyCompletedToday(true);
-    }
-
-    setQuizQuestions(result.data.questions);
-    setCurrentQuestion(0);
-    setSelectedAnswer(null);
+    const questions = quizResult.data.questions || [];
+    setQuizQuestions(questions);
+    setCurrentQuestionIndex(0);
     setAnswers({});
     setScore(0);
     setQuizFinished(false);
-    setTimeLeft(QUESTION_TIME);
+    setTimeLeft(TOTAL_QUIZ_TIME_SECONDS);
     setFeedbackDetails({});
-    setLoading(false);
+    isSubmittingRef.current = false;
 
+    // 2. Fetch current streak
     const streakResult = await dailyQuizService.getUserStreak();
-    if (!streakResult.error) {
+    if (!streakResult.error && streakResult.data) {
       setStreak(streakResult.data);
     }
-  }
+
+    // 3. Check if already completed today
+    if (quizResult.data.alreadySubmitted) {
+      setAlreadyCompletedToday(true);
+      const subResult = await dailyQuizService.getTodaySubmission();
+      if (!subResult.error && subResult.data) {
+        setTodaySubmission(subResult.data);
+        setScore(subResult.data.score);
+        setAnswers(subResult.data.answers || {});
+        if (subResult.data.details) {
+          setFeedbackDetails(subResult.data.details);
+        }
+      }
+    }
+
+    setLoading(false);
+  }, []);
 
   useEffect(() => {
     void loadQuiz();
-  }, []);
+  }, [loadQuiz]);
 
-  // Question countdown timer
+  const activeQuestion = quizQuestions[currentQuestionIndex];
+  const selectedAnswer =
+    activeQuestion && answers[activeQuestion.id] !== undefined
+      ? answers[activeQuestion.id]
+      : null;
+
+  // Handle option selection
+  const handleSelectOption = (optionIndex: number) => {
+    if (!activeQuestion || isSubmittingRef.current || quizFinished) return;
+    setAnswers((prev) => ({
+      ...prev,
+      [activeQuestion.id]: optionIndex,
+    }));
+  };
+
+  // Submit quiz
+  const handleSubmitQuiz = useCallback(async () => {
+    if (isSubmittingRef.current || quizFinished || quizQuestions.length === 0) {
+      return;
+    }
+
+    isSubmittingRef.current = true;
+    setSubmitting(true);
+
+    try {
+      // Ensure all assigned questions have a numeric value (-1 for unselected)
+      const completeAnswers: Record<string, number> = {};
+      quizQuestions.forEach((q) => {
+        completeAnswers[q.id] =
+          typeof answers[q.id] === "number" ? answers[q.id] : -1;
+      });
+
+      const result = await dailyQuizService.submitQuiz(completeAnswers);
+
+      if (result.error) {
+        setErrorMessage(result.error.message);
+        return;
+      }
+
+      setScore(result.data.score);
+      if (result.data.details) {
+        setFeedbackDetails(result.data.details);
+      }
+
+      const istToday = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Kolkata",
+      }).format(new Date());
+
+      setStreak((prev) => {
+        const nextStreakCount = result.data.streakCount;
+        const nextBest = Math.max(prev?.bestStreak || 0, nextStreakCount);
+        return {
+          currentStreak: nextStreakCount,
+          bestStreak: nextBest,
+          lastCompletedDate: istToday,
+        };
+      });
+
+      setQuizFinished(true);
+      setIsResultModalOpen(true);
+    } finally {
+      setSubmitting(false);
+      isSubmittingRef.current = false;
+    }
+  }, [answers, quizFinished, quizQuestions]);
+
+  // Quiz Countdown Timer
   useEffect(() => {
-    if (loading || quizFinished || !question) return;
+    if (loading || quizFinished || alreadyCompletedToday || quizQuestions.length === 0) {
+      return;
+    }
 
     if (timeLeft <= 0) {
-      // Auto advance or submit when time runs out
-      void handleAdvance(selectedAnswer ?? -1);
+      // Time expired: auto-submit quiz
+      void handleSubmitQuiz();
       return;
     }
 
@@ -100,75 +194,48 @@ export default function DailyQuizPage() {
     }, 1000);
 
     return () => window.clearTimeout(timer);
-  }, [timeLeft, quizFinished, loading, question]);
+  }, [timeLeft, quizFinished, loading, alreadyCompletedToday, quizQuestions.length, handleSubmitQuiz]);
 
-  async function handleAdvance(chosenIndex: number) {
-    if (!question || isSubmittingRef.current) return;
-
-    const updatedAnswers = {
-      ...answers,
-      [question.id]: chosenIndex,
-    };
-    setAnswers(updatedAnswers);
-
-    if (currentQuestion === quizQuestions.length - 1) {
-      isSubmittingRef.current = true;
-      setSubmitting(true);
-      try {
-        const result = await dailyQuizService.submitQuiz(updatedAnswers);
-
-        if (result.error) {
-          setErrorMessage(result.error.message);
-          return;
-        }
-
-        setScore(result.data.score);
-        if (result.data.details) {
-          setFeedbackDetails(result.data.details);
-        }
-
-        const istToday = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
-
-        setStreak((prev) =>
-          prev
-            ? {
-                ...prev,
-                currentStreak: result.data.streakCount,
-                bestStreak: Math.max(prev.bestStreak, result.data.streakCount),
-                lastCompletedDate: istToday,
-              }
-            : {
-                currentStreak: result.data.streakCount,
-                bestStreak: result.data.streakCount,
-                lastCompletedDate: istToday,
-              },
-        );
-        setQuizFinished(true);
-      } finally {
-        setSubmitting(false);
-        isSubmittingRef.current = false;
-      }
-      return;
+  const handleNextQuestion = () => {
+    if (currentQuestionIndex < quizQuestions.length - 1) {
+      setCurrentQuestionIndex((prev) => prev + 1);
     }
+  };
 
-    setCurrentQuestion((prev) => prev + 1);
-    setSelectedAnswer(null);
-    setTimeLeft(QUESTION_TIME);
-  }
+  const handlePrevQuestion = () => {
+    if (currentQuestionIndex > 0) {
+      setCurrentQuestionIndex((prev) => prev - 1);
+    }
+  };
 
-  function handleRestart() {
-    void loadQuiz();
-  }
+  const handleJumpToQuestion = (index: number) => {
+    if (index >= 0 && index < quizQuestions.length) {
+      setCurrentQuestionIndex(index);
+    }
+  };
 
-  const progress =
+  const handleResetMock = async () => {
+    if (dailyQuizService.resetMockQuiz) {
+      await dailyQuizService.resetMockQuiz();
+      void loadQuiz();
+    }
+  };
+
+  // Progress calculation
+  const totalAnswered = Object.keys(answers).filter(
+    (k) => answers[k] !== undefined && answers[k] !== -1,
+  ).length;
+
+  const progressPercent =
     quizFinished || quizQuestions.length === 0
       ? 100
-      : ((currentQuestion + 1) / quizQuestions.length) * 100;
+      : (totalAnswered / quizQuestions.length) * 100;
 
   if (loading) {
     return (
-      <div className="flex min-h-[50vh] items-center justify-center p-6 text-sm text-muted-foreground">
-        Loading today&apos;s quiz...
+      <div className="flex min-h-[50vh] flex-col items-center justify-center gap-3 p-6 text-sm text-muted-foreground">
+        <div className="size-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        <p>Loading today&apos;s daily quiz...</p>
       </div>
     );
   }
@@ -180,13 +247,13 @@ export default function DailyQuizPage() {
           <CardHeader>
             <div className="flex items-center gap-2 text-destructive">
               <AlertCircle className="size-5" />
-              <CardTitle className="text-lg">Failed to Load Quiz</CardTitle>
+              <CardTitle className="text-lg">Unable to Load Quiz</CardTitle>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">{errorMessage}</p>
-            <Button onClick={() => void loadQuiz()}>
-              <RotateCcw className="mr-2 size-4" /> Try Again
+            <Button onClick={() => void loadQuiz()} className="gap-2">
+              <RotateCcw className="size-4" /> Try Again
             </Button>
           </CardContent>
         </Card>
@@ -194,12 +261,13 @@ export default function DailyQuizPage() {
     );
   }
 
+  // View: Already completed today
   if (alreadyCompletedToday) {
     return (
       <div className="mx-auto w-full max-w-2xl space-y-6 p-4 sm:p-6 lg:p-8">
         <Card className="border-border bg-card shadow-sm text-center">
           <CardContent className="space-y-6 p-6 sm:p-8">
-            <div className="mx-auto flex size-16 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+            <div className="mx-auto flex size-16 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
               <CheckCircle2 className="size-8" />
             </div>
 
@@ -207,11 +275,23 @@ export default function DailyQuizPage() {
               <h2 className="text-2xl font-bold tracking-tight text-foreground">
                 You&apos;re All Caught Up!
               </h2>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-muted-foreground max-w-md mx-auto">
                 You have already completed today&apos;s daily quiz and logged your attendance. Come back tomorrow for 5 new questions!
               </p>
             </div>
 
+            {/* Score pill if available */}
+            {todaySubmission && (
+              <div className="inline-flex items-center gap-2 rounded-full border border-border bg-muted/40 px-4 py-1.5 text-xs font-medium text-foreground">
+                <Trophy className="size-3.5 text-amber-500" />
+                <span>
+                  Today&apos;s Score: {todaySubmission.score} / {todaySubmission.total} (
+                  {Math.round((todaySubmission.score / todaySubmission.total) * 100)}%)
+                </span>
+              </div>
+            )}
+
+            {/* Streak metrics */}
             {streak && (
               <div className="grid grid-cols-2 gap-4 rounded-xl border border-border bg-muted/30 p-4">
                 <div className="flex flex-col items-center justify-center">
@@ -220,7 +300,10 @@ export default function DailyQuizPage() {
                   </span>
                   <div className="mt-1 flex items-center gap-1.5 text-2xl font-bold text-foreground">
                     <Flame className="size-5 fill-orange-500 text-orange-500" />
-                    <span>{streak.currentStreak} {streak.currentStreak === 1 ? "Day" : "Days"}</span>
+                    <span>
+                      {streak.currentStreak}{" "}
+                      {streak.currentStreak === 1 ? "Day" : "Days"}
+                    </span>
                   </div>
                 </div>
                 <div className="flex flex-col items-center justify-center">
@@ -229,17 +312,53 @@ export default function DailyQuizPage() {
                   </span>
                   <div className="mt-1 flex items-center gap-1.5 text-2xl font-bold text-foreground">
                     <Trophy className="size-5 text-amber-500" />
-                    <span>{streak.bestStreak} {streak.bestStreak === 1 ? "Day" : "Days"}</span>
+                    <span>
+                      {streak.bestStreak}{" "}
+                      {streak.bestStreak === 1 ? "Day" : "Days"}
+                    </span>
                   </div>
                 </div>
               </div>
             )}
+
+            <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+              {quizQuestions.length > 0 && (
+                <Button
+                  onClick={() => setIsExplanationDrawerOpen(true)}
+                  className="gap-2"
+                >
+                  <BookOpen className="size-4" /> Review Today&apos;s Questions
+                </Button>
+              )}
+
+              {isMock && (
+                <Button
+                  variant="outline"
+                  onClick={() => void handleResetMock()}
+                  className="gap-2 text-xs text-muted-foreground"
+                >
+                  <RotateCcw className="size-3.5" /> Practice Again (Reset Mock)
+                </Button>
+              )}
+            </div>
           </CardContent>
         </Card>
+
+        {/* Drawer for reviewing today's questions */}
+        <ExplanationDrawer
+          isOpen={isExplanationDrawerOpen}
+          onClose={() => setIsExplanationDrawerOpen(false)}
+          questions={quizQuestions}
+          answers={answers}
+          feedbackDetails={feedbackDetails}
+          score={score}
+          total={quizQuestions.length}
+        />
       </div>
     );
   }
 
+  // View: No questions available
   if (quizQuestions.length === 0) {
     return (
       <div className="mx-auto max-w-2xl p-6 text-center text-sm text-muted-foreground">
@@ -266,13 +385,10 @@ export default function DailyQuizPage() {
         </div>
 
         {streak && (
-          <Badge
-            variant="secondary"
-            className="flex w-fit items-center gap-1.5 border border-border px-3 py-1.5 text-xs font-semibold"
-          >
-            <Flame className="size-4 text-orange-500 fill-orange-500" />
-            <span>{streak.currentStreak} Day Streak</span>
-          </Badge>
+          <StreakBadge
+            currentStreak={streak.currentStreak}
+            bestStreak={streak.bestStreak}
+          />
         )}
       </div>
 
@@ -280,15 +396,16 @@ export default function DailyQuizPage() {
       <div className="space-y-2">
         <div className="flex justify-between text-xs font-medium text-muted-foreground">
           <span>
-            Question {quizFinished ? quizQuestions.length : currentQuestion + 1} of{" "}
-            {quizQuestions.length}
+            {quizFinished
+              ? "All Questions Completed"
+              : `Question ${currentQuestionIndex + 1} of ${quizQuestions.length} (${totalAnswered} Answered)`}
           </span>
-          <span>{Math.round(progress)}% Completed</span>
+          <span>{Math.round(progressPercent)}% Answered</span>
         </div>
         <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
           <div
             className="h-full rounded-full bg-primary transition-all duration-300"
-            style={{ width: `${progress}%` }}
+            style={{ width: `${progressPercent}%` }}
           />
         </div>
       </div>
@@ -296,215 +413,113 @@ export default function DailyQuizPage() {
       {quizFinished ? (
         /* Results View */
         <div className="space-y-6">
-          <Card className="overflow-hidden border-border bg-card shadow-sm">
-            <CardContent className="p-6 text-center sm:p-8">
-              <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+          <Card className="overflow-hidden border-border bg-card shadow-sm text-center">
+            <CardContent className="p-6 sm:p-8 space-y-6">
+              <div className="mx-auto flex size-16 items-center justify-center rounded-2xl bg-primary/10 text-primary">
                 {score >= 4 ? (
-                  <Trophy className="size-8" />
+                  <Trophy className="size-8 text-amber-500 animate-bounce" />
                 ) : score >= 3 ? (
-                  <CheckCircle2 className="size-8" />
+                  <CheckCircle2 className="size-8 text-emerald-500" />
                 ) : (
-                  <Brain className="size-8" />
+                  <Brain className="size-8 text-primary" />
                 )}
               </div>
 
-              <h2 className="text-2xl font-bold text-foreground">
-                Quiz Completed!
-              </h2>
+              <div className="space-y-2">
+                <h2 className="text-2xl font-bold text-foreground">
+                  Quiz Completed!
+                </h2>
+                <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                  {score >= 4
+                    ? "Outstanding job! You have demonstrated a strong mastery of today's topics."
+                    : score >= 3
+                      ? "Great effort! A solid performance across core concepts."
+                      : "Good attempt! Keep reviewing your fundamentals and practice daily."}
+                </p>
+              </div>
 
-              <p className="mt-2 text-sm text-muted-foreground">
-                {score >= 4
-                  ? "Outstanding job! You have demonstrated a strong mastery of today's topics."
-                  : score >= 3
-                    ? "Great effort! A solid performance across core concepts."
-                    : "Good attempt! Keep reviewing your fundamentals and practice daily."}
-              </p>
-
-              <div className="my-6 inline-flex flex-col items-center justify-center rounded-xl border border-border bg-muted/40 px-8 py-5">
+              <div className="my-2 inline-flex flex-col items-center justify-center rounded-xl border border-border bg-muted/40 px-8 py-5">
                 <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                   Final Score
                 </span>
                 <span className="mt-1 text-4xl font-extrabold text-foreground">
-                  {score} <span className="text-xl font-normal text-muted-foreground">/ {quizQuestions.length}</span>
+                  {score}{" "}
+                  <span className="text-xl font-normal text-muted-foreground">
+                    / {quizQuestions.length}
+                  </span>
                 </span>
                 <span className="mt-1 text-xs font-medium text-primary">
                   {Math.round((score / quizQuestions.length) * 100)}% Accuracy
                 </span>
               </div>
 
-              <div>
-                <Button onClick={handleRestart} className="gap-2">
-                  <RotateCcw className="size-4" /> Practice Again
+              <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                <Button
+                  onClick={() => setIsExplanationDrawerOpen(true)}
+                  className="gap-2"
+                >
+                  <BookOpen className="size-4" /> Review Explanations
                 </Button>
+
+                {isMock && (
+                  <Button
+                    variant="outline"
+                    onClick={() => void handleResetMock()}
+                    className="gap-2"
+                  >
+                    <RotateCcw className="size-4" /> Practice Again (Reset Mock)
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>
-
-          {/* Detailed Question Review */}
-          <div className="space-y-4">
-            <h3 className="text-base font-semibold text-foreground">
-              Question Review & Explanations
-            </h3>
-
-            <div className="space-y-3">
-              {quizQuestions.map((q, idx) => {
-                const feedback = feedbackDetails[q.id];
-                const studentAnswer = answers[q.id];
-                const isCorrect =
-                  feedback?.isCorrect ?? (studentAnswer === q.correctAnswerIndex);
-                const correctIdx =
-                  feedback?.correctAnswerIndex ?? q.correctAnswerIndex ?? 0;
-                const explanation =
-                  feedback?.explanation ?? q.explanation ?? "";
-
-                return (
-                  <Card key={q.id} className="border-border bg-card">
-                    <CardHeader className="p-4 pb-2">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-center gap-2">
-                          <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold text-foreground">
-                            {idx + 1}
-                          </span>
-                          <h4 className="text-sm font-semibold text-foreground">
-                            {q.question}
-                          </h4>
-                        </div>
-                        {isCorrect ? (
-                          <Badge
-                            variant="secondary"
-                            className="shrink-0 bg-green-500/15 text-green-700 dark:text-green-400 border-none gap-1"
-                          >
-                            <CheckCircle2 className="size-3.5" /> Correct
-                          </Badge>
-                        ) : (
-                          <Badge
-                            variant="secondary"
-                            className="shrink-0 bg-destructive/15 text-destructive border-none gap-1"
-                          >
-                            <XCircle className="size-3.5" /> Incorrect
-                          </Badge>
-                        )}
-                      </div>
-                    </CardHeader>
-
-                    <CardContent className="p-4 pt-2 text-xs space-y-2">
-                      <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                        {q.options.map((opt, optIdx) => {
-                          const wasSelected = studentAnswer === optIdx;
-                          const isTheCorrectOne = correctIdx === optIdx;
-
-                          let itemClass = "border border-border bg-muted/20 text-muted-foreground";
-                          if (isTheCorrectOne) {
-                            itemClass = "border-green-500/40 bg-green-500/10 text-green-700 dark:text-green-300 font-medium";
-                          } else if (wasSelected && !isCorrect) {
-                            itemClass = "border-destructive/40 bg-destructive/10 text-destructive font-medium";
-                          }
-
-                          return (
-                            <div
-                              key={opt}
-                              className={`flex items-center gap-2 rounded-md p-2 text-xs ${itemClass}`}
-                            >
-                              <span className="font-semibold">
-                                {String.fromCharCode(65 + optIdx)}.
-                              </span>
-                              <span>{opt}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      {explanation && (
-                        <div className="mt-2 rounded-md border border-border bg-muted/30 p-2.5 text-xs text-muted-foreground">
-                          <span className="font-semibold text-foreground">Explanation: </span>
-                          {explanation}
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-          </div>
         </div>
-      ) : (
-        /* Active Quiz Question View */
-        <Card className="border-border bg-card shadow-sm">
-          <CardHeader className="border-b border-border p-4 sm:p-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <Badge variant="outline" className="text-xs">
-                Question {currentQuestion + 1} of {quizQuestions.length}
-              </Badge>
+      ) : activeQuestion ? (
+        /* Active Quiz Player */
+        <QuizPlayer
+          question={activeQuestion}
+          questionIndex={currentQuestionIndex}
+          totalQuestions={quizQuestions.length}
+          selectedAnswer={selectedAnswer}
+          answers={answers}
+          questions={quizQuestions}
+          onSelectOption={handleSelectOption}
+          onNextQuestion={handleNextQuestion}
+          onPrevQuestion={handlePrevQuestion}
+          onJumpToQuestion={handleJumpToQuestion}
+          onSubmitQuiz={() => void handleSubmitQuiz()}
+          isSubmitting={submitting}
+          timerComponent={
+            <QuizTimer
+              secondsLeft={timeLeft}
+              totalSeconds={TOTAL_QUIZ_TIME_SECONDS}
+            />
+          }
+        />
+      ) : null}
 
-              <div
-                className={`flex items-center gap-1.5 text-xs font-semibold ${
-                  timeLeft <= 10 ? "text-destructive animate-pulse" : "text-muted-foreground"
-                }`}
-              >
-                <Clock className="size-3.5" />
-                <span>00:{String(timeLeft).padStart(2, "0")} remaining</span>
-              </div>
-            </div>
-          </CardHeader>
+      {/* Result celebration modal */}
+      <ResultModal
+        isOpen={isResultModalOpen}
+        onClose={() => setIsResultModalOpen(false)}
+        score={score}
+        total={quizQuestions.length}
+        streakCount={streak?.currentStreak || 1}
+        bestStreak={streak?.bestStreak || 1}
+        onViewExplanations={() => setIsExplanationDrawerOpen(true)}
+        onPracticeAgain={isMock ? () => void handleResetMock() : undefined}
+      />
 
-          <CardContent className="p-4 sm:p-6 space-y-6">
-            <h2 className="text-base font-semibold leading-relaxed text-foreground sm:text-lg">
-              {question.question}
-            </h2>
-
-            <div className="space-y-2.5">
-              {question.options.map((option, index) => {
-                const isSelected = selectedAnswer === index;
-
-                return (
-                  <button
-                    key={`${question.id}-${option}`}
-                    type="button"
-                    onClick={() => setSelectedAnswer(index)}
-                    className={`flex w-full cursor-pointer items-center justify-start rounded-xl border p-3.5 text-left text-sm transition-all ${
-                      isSelected
-                        ? "border-primary bg-primary/10 text-foreground font-medium ring-1 ring-primary"
-                        : "border-border bg-card text-foreground hover:bg-muted/50"
-                    }`}
-                  >
-                    <span
-                      className={`mr-3 flex size-6 shrink-0 items-center justify-center rounded-lg text-xs font-semibold ${
-                        isSelected
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted text-muted-foreground"
-                      }`}
-                    >
-                      {String.fromCharCode(65 + index)}
-                    </span>
-                    <span className="flex-1">{option}</span>
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="flex items-center justify-between border-t border-border pt-4">
-              <span className="text-xs text-muted-foreground">
-                Select an option to advance
-              </span>
-
-              <Button
-                type="button"
-                disabled={selectedAnswer === null || submitting}
-                onClick={() => void handleAdvance(selectedAnswer ?? 0)}
-                className="gap-2"
-              >
-                {currentQuestion === quizQuestions.length - 1 ? (
-                  submitting ? "Submitting..." : "Submit Quiz"
-                ) : (
-                  <>
-                    Next Question <ArrowRight className="size-4" />
-                  </>
-                )}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* Bottom Drawer for question-by-question explanations */}
+      <ExplanationDrawer
+        isOpen={isExplanationDrawerOpen}
+        onClose={() => setIsExplanationDrawerOpen(false)}
+        questions={quizQuestions}
+        answers={answers}
+        feedbackDetails={feedbackDetails}
+        score={score}
+        total={quizQuestions.length}
+      />
     </div>
   );
 }

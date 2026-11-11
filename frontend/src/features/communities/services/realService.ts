@@ -879,11 +879,20 @@ export const realCommunitiesService: CommunitiesService = {
 
       // 2. Insert record into public.notes (or direct publish if staff)
       let inserted: any = null;
+      const noteTag =
+        data.type === "PYQ"
+          ? "PYQ"
+          : data.category === "Unit wise"
+            ? "Unit wise"
+            : data.category === "Other"
+              ? "Other"
+              : "Lecture / Day wise";
+
       if (data.isDirectPublish) {
         const { data: rpcData, error: rpcError } = await supabase.rpc("direct_publish_note", {
           p_subject_id: data.subjectId,
           p_title: data.title.trim(),
-          p_tag: data.type === "PYQ" ? "PYQ" : "Lecture",
+          p_tag: noteTag,
           p_category: data.category || "Other",
           p_storage_path: storagePath,
           p_file_size_bytes: data.file.size,
@@ -907,7 +916,7 @@ export const realCommunitiesService: CommunitiesService = {
             title: data.title.trim(),
             description: data.category || "Other",
             storage_path: storagePath,
-            tag: data.type === "PYQ" ? "PYQ" : "Lecture",
+            tag: noteTag,
             is_shared: false,
             status: "pending",
             file_size_bytes: data.file.size,

@@ -682,18 +682,89 @@ export const ResourceModerationPage: React.FC = () => {
         </div>
       ) : (
         <div className="space-y-3">
+          {/* Multi-select and Batch Actions Bar */}
+          <div className="flex items-center justify-between gap-2 px-3 py-2 bg-muted/40 rounded-xl border border-border/50 text-xs">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleSelectAllVisible}
+                className="flex items-center gap-1.5 font-medium text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
+                title={selectedNoteIds.size === filteredNotes.length && filteredNotes.length > 0 ? "Deselect All" : "Select All Visible"}
+              >
+                {selectedNoteIds.size > 0 && selectedNoteIds.size === filteredNotes.length ? (
+                  <CheckSquare className="h-4 w-4 text-primary" />
+                ) : (
+                  <Square className="h-4 w-4" />
+                )}
+                <span>
+                  {selectedNoteIds.size === filteredNotes.length && filteredNotes.length > 0
+                    ? "Deselect All"
+                    : "Select All Visible"}
+                </span>
+              </button>
+
+              {selectedNoteIds.size > 0 && (
+                <span className="text-muted-foreground">
+                  • <strong className="text-foreground">{selectedNoteIds.size}</strong> of {filteredNotes.length} selected
+                </span>
+              )}
+            </div>
+
+            {selectedNoteIds.size > 0 && (
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleClearSelection}
+                  className="h-7 text-xs px-2 text-muted-foreground hover:text-foreground cursor-pointer"
+                >
+                  Clear
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setIsBatchRejectOpen(true)}
+                  disabled={isBatchProcessing}
+                  className="h-7 text-xs px-3 gap-1.5 shadow-xs cursor-pointer"
+                >
+                  {isBatchProcessing ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-3.5 w-3.5" />
+                  )}
+                  <span>Discard Selected ({selectedNoteIds.size})</span>
+                </Button>
+              </div>
+            )}
+          </div>
+
           {filteredNotes.map((note) => {
             const isProcessing = isProcessingId === note.id;
             const isOpening = openingId === note.id;
             const currentCategory = categoryOverrides[note.id] || note.category || "Other";
+            const isSelected = selectedNoteIds.has(note.id);
 
             return (
               <Card
                 key={note.id}
-                className="rounded-2xl border border-border/70 bg-card p-4 sm:p-5 shadow-xs space-y-3"
+                className={`rounded-2xl border transition-colors bg-card p-4 sm:p-5 shadow-xs space-y-3 ${
+                  isSelected
+                    ? "border-primary/60 bg-primary/5 ring-1 ring-primary/20"
+                    : "border-border/70 hover:border-border"
+                }`}
               >
                 <div className="flex items-center justify-between gap-2 text-xs flex-wrap">
-                  <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => handleToggleNoteSelect(note.id)}
+                      className="h-4 w-4 rounded border-border text-primary focus:ring-primary cursor-pointer accent-primary"
+                      disabled={isProcessing || isBatchProcessing}
+                      aria-label={`Select ${note.title}`}
+                    />
                     <span className="rounded px-2 py-0.5 font-mono text-[11px] font-semibold bg-muted text-muted-foreground border border-border/50">
                       {note.subjectId.toUpperCase()}
                     </span>
@@ -888,6 +959,25 @@ export const ResourceModerationPage: React.FC = () => {
         variant="destructive"
         isLoading={Boolean(isProcessingId)}
         onConfirm={handleConfirmReject}
+      />
+
+      {/* Batch Discard Selected Resources Confirmation */}
+      <ConfirmDialog
+        open={isBatchRejectOpen}
+        onOpenChange={(open) => !open && setIsBatchRejectOpen(false)}
+        title={`Discard ${selectedNoteIds.size} Selected Notes`}
+        description={
+          <>
+            Are you sure you want to permanently discard the{" "}
+            <span className="font-semibold text-foreground">{selectedNoteIds.size}</span> selected note
+            submission{selectedNoteIds.size === 1 ? "" : "s"}? Their files will be purged from storage and removed
+            from the moderation queue, immediately releasing the students&apos; personal upload quotas.
+          </>
+        }
+        confirmText={isBatchProcessing ? "Discarding..." : `Discard ${selectedNoteIds.size} Notes`}
+        variant="destructive"
+        isLoading={isBatchProcessing}
+        onConfirm={handleConfirmBatchReject}
       />
     </div>
   );

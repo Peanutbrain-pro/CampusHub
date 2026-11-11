@@ -10,6 +10,8 @@ const subjectMap: Record<string, { id: string; name: string; code: string; canon
   cs303: { id: "cs303", name: "Operating Systems", code: "CS303", canonicalId: "os" },
   dsa: { id: "dsa", name: "Data Structures & Algorithms", code: "CS201", canonicalId: "dsa" },
   cs201: { id: "cs201", name: "Data Structures & Algorithms", code: "CS201", canonicalId: "dsa" },
+  epp: { id: "epp", name: "Engineering Professional Practice", code: "HS301", canonicalId: "epp" },
+  hs301: { id: "hs301", name: "Engineering Professional Practice", code: "HS301", canonicalId: "epp" },
 };
 
 function resolveSubjectKey(id: string): string {
