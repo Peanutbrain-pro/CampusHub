@@ -1,5 +1,6 @@
 /* Milkdown Crepe Theme Integration for CampusHub */
 
+/* ─── Token mapping – Light Mode ─────────────────────────────────────────── */
 .milkdown {
   /* Typography */
   --crepe-base-font-size: 0.9375rem;
@@ -7,14 +8,19 @@
   --crepe-font-title: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --crepe-font-code: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
 
-  /* Theme tokens - Light Mode */
+  /* Map crepe tokens to shadcn/ui CSS variables */
   --crepe-color-background: hsl(var(--background));
   --crepe-color-on-background: hsl(var(--foreground));
   --crepe-color-surface: hsl(var(--card));
   --crepe-color-surface-low: hsl(var(--muted));
   --crepe-color-on-surface: hsl(var(--foreground));
   --crepe-color-on-surface-variant: hsl(var(--muted-foreground));
-  --crepe-color-outline: hsl(var(--muted-foreground));
+  /*
+   * --crepe-color-outline drives ALL icon fills in the milkdown library CSS
+   * (block-edit, top-bar, toolbar). It MUST resolve to a visible foreground
+   * colour – not a background-ish value.
+   */
+  --crepe-color-outline: hsl(var(--foreground) / 0.55);
   --crepe-color-primary: hsl(var(--primary));
   --crepe-color-secondary: hsl(var(--secondary));
   --crepe-color-on-secondary: hsl(var(--secondary-foreground));
@@ -34,7 +40,7 @@
   color: var(--crepe-color-on-background);
 }
 
-/* Theme tokens - Dark Mode */
+/* ─── Token mapping – Dark Mode ──────────────────────────────────────────── */
 .dark .milkdown {
   --crepe-color-background: hsl(var(--background));
   --crepe-color-on-background: hsl(var(--foreground));
@@ -42,7 +48,7 @@
   --crepe-color-surface-low: hsl(var(--muted));
   --crepe-color-on-surface: hsl(var(--foreground));
   --crepe-color-on-surface-variant: hsl(var(--muted-foreground));
-  --crepe-color-outline: hsl(var(--muted-foreground));
+  --crepe-color-outline: hsl(var(--foreground) / 0.6);
   --crepe-color-primary: hsl(var(--primary));
   --crepe-color-secondary: hsl(var(--secondary));
   --crepe-color-on-secondary: hsl(var(--secondary-foreground));
@@ -60,7 +66,7 @@
   background: var(--crepe-color-background) !important;
 }
 
-/* Outer editor container: strictly prevent horizontal scrolling */
+/* ─── Outer editor container ─────────────────────────────────────────────── */
 .milkdown-editor {
   background-color: hsl(var(--background));
   overflow-x: hidden !important;
@@ -73,7 +79,7 @@
   overflow-x: hidden !important;
 }
 
-/* Top persistent formatting bar */
+/* ─── Top persistent formatting bar ─────────────────────────────────────── */
 .milkdown .milkdown-top-bar {
   background: hsl(var(--card)) !important;
   border-bottom: 1px solid hsl(var(--border)) !important;
@@ -109,6 +115,59 @@
   display: none !important;
 }
 
+/* ─── Top-bar icon SVGs ───────────────────────────────────────────────────
+   The library drives icon colour via fill/stroke on var(--crepe-color-outline).
+   We reinforce this explicitly so icons are always visible in both themes.    */
+.milkdown .milkdown-top-bar .top-bar-item {
+  color: var(--crepe-color-outline) !important;
+}
+
+.milkdown .milkdown-top-bar .top-bar-item svg {
+  color: var(--crepe-color-outline) !important;
+  fill: var(--crepe-color-outline) !important;
+  stroke: none !important;
+  width: 20px !important;
+  height: 20px !important;
+}
+
+.milkdown .milkdown-top-bar .top-bar-item:hover {
+  background: hsl(var(--accent)) !important;
+}
+
+.milkdown .milkdown-top-bar .top-bar-item.active {
+  background: hsl(var(--secondary)) !important;
+}
+
+.milkdown .milkdown-top-bar .top-bar-item.active svg {
+  color: hsl(var(--primary)) !important;
+  fill: hsl(var(--primary)) !important;
+  stroke: none !important;
+}
+
+/* Heading selector label & chevron */
+.milkdown .milkdown-top-bar .top-bar-heading-button {
+  color: hsl(var(--foreground)) !important;
+}
+
+.milkdown .milkdown-top-bar .top-bar-heading-button:hover {
+  background: hsl(var(--accent)) !important;
+}
+
+.milkdown .milkdown-top-bar .top-bar-heading-button .top-bar-heading-label {
+  color: hsl(var(--foreground)) !important;
+}
+
+.milkdown .milkdown-top-bar .top-bar-heading-button .top-bar-chevron svg {
+  color: var(--crepe-color-outline) !important;
+  stroke: var(--crepe-color-outline) !important;
+  fill: none !important;
+}
+
+.milkdown .milkdown-top-bar .top-bar-divider {
+  background: hsl(var(--border)) !important;
+}
+
+/* ─── Top-bar actions slot (Save / Delete buttons) ───────────────────────── */
 .milkdown .milkdown-top-bar .milkdown-topbar-actions {
   display: flex !important;
   align-items: center !important;
@@ -120,7 +179,6 @@
   z-index: 25 !important;
 }
 
-/* Explicit styling for actions slot buttons to override .milkdown button reset */
 .milkdown .milkdown-top-bar .milkdown-topbar-actions .save-btn {
   display: inline-flex !important;
   align-items: center !important;
@@ -203,40 +261,8 @@
   fill: none !important;
 }
 
-.milkdown .milkdown-top-bar .top-bar-divider {
-  background: hsl(var(--border)) !important;
-}
-
-.milkdown .milkdown-top-bar .top-bar-heading-button:hover,
-.milkdown .milkdown-top-bar .top-bar-item:hover {
-  background: hsl(var(--accent)) !important;
-}
-
-.milkdown .milkdown-top-bar .top-bar-heading-button .top-bar-heading-label {
-  color: hsl(var(--foreground)) !important;
-}
-
-.milkdown .milkdown-top-bar .top-bar-heading-button .top-bar-chevron svg,
-.milkdown .milkdown-top-bar .top-bar-item svg {
-  color: hsl(var(--muted-foreground)) !important;
-  stroke: hsl(var(--muted-foreground)) !important;
-  fill: hsl(var(--muted-foreground)) !important;
-}
-
-.milkdown .milkdown-top-bar .top-bar-item.active {
-  background: hsl(var(--secondary)) !important;
-}
-
-.milkdown .milkdown-top-bar .top-bar-item.active svg {
-  color: hsl(var(--primary)) !important;
-  stroke: hsl(var(--primary)) !important;
-  fill: hsl(var(--primary)) !important;
-}
-
-/* Dropdown menus, slash menu, popovers, and floating toolbars */
-.milkdown .top-bar-heading-dropdown,
-.milkdown .milkdown-slash-menu,
-.milkdown .milkdown-toolbar {
+/* ─── Heading dropdown ───────────────────────────────────────────────────── */
+.milkdown .top-bar-heading-dropdown {
   background: hsl(var(--popover)) !important;
   color: hsl(var(--popover-foreground)) !important;
   border: 1px solid hsl(var(--border)) !important;
@@ -247,9 +273,7 @@
   color: hsl(var(--popover-foreground)) !important;
 }
 
-.milkdown .top-bar-heading-option:hover,
-.milkdown .milkdown-slash-menu li:hover,
-.milkdown .milkdown-toolbar .toolbar-item:hover {
+.milkdown .top-bar-heading-option:hover {
   background: hsl(var(--accent)) !important;
   color: hsl(var(--accent-foreground)) !important;
 }
@@ -260,19 +284,45 @@
   font-weight: 600;
 }
 
-/* Code block editor */
-.milkdown .milkdown-code-block {
-  background: hsl(var(--card)) !important;
+/* ─── Floating selection toolbar ─────────────────────────────────────────── */
+.milkdown .milkdown-toolbar {
+  background: hsl(var(--popover)) !important;
+  color: hsl(var(--popover-foreground)) !important;
   border: 1px solid hsl(var(--border)) !important;
-  border-radius: var(--radius);
+  box-shadow: var(--crepe-shadow-2) !important;
 }
 
-.milkdown .milkdown-code-block .cm-editor,
-.milkdown .milkdown-code-block .cm-gutters {
-  background: transparent !important;
+.milkdown .milkdown-toolbar .toolbar-item svg {
+  color: var(--crepe-color-outline) !important;
+  fill: var(--crepe-color-outline) !important;
+  stroke: none !important;
 }
 
-/* Block handle (+ / drag handle) */
+.milkdown .milkdown-toolbar .toolbar-item:hover {
+  background: hsl(var(--accent)) !important;
+  color: hsl(var(--accent-foreground)) !important;
+}
+
+.milkdown .milkdown-toolbar .toolbar-item.active svg {
+  color: hsl(var(--primary)) !important;
+  fill: hsl(var(--primary)) !important;
+}
+
+/* ─── Slash command menu ─────────────────────────────────────────────────── */
+.milkdown .milkdown-slash-menu {
+  background: hsl(var(--popover)) !important;
+  color: hsl(var(--popover-foreground)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  box-shadow: var(--crepe-shadow-2) !important;
+}
+
+.milkdown .milkdown-slash-menu li:hover {
+  background: hsl(var(--accent)) !important;
+  color: hsl(var(--accent-foreground)) !important;
+}
+
+/* ─── Block handle (drag icon + "+" add button) ──────────────────────────
+   These icons MUST be visible — they disappear when fill/stroke are wrong.   */
 .milkdown .milkdown-block-handle {
   z-index: 15 !important;
   position: absolute !important;
@@ -292,7 +342,7 @@
 }
 
 .milkdown .milkdown-block-handle .operation-item {
-  color: hsl(var(--muted-foreground)) !important;
+  color: var(--crepe-color-outline) !important;
   border-radius: 4px !important;
   cursor: pointer !important;
   display: flex !important;
@@ -306,12 +356,35 @@
   color: hsl(var(--foreground)) !important;
 }
 
+/*
+ * The drag handle & add-block (+) SVGs use fill to render.
+ * We use var(--crepe-color-outline) which is explicitly set above to a
+ * visible semi-transparent foreground colour for both light and dark mode.
+ */
 .milkdown .milkdown-block-handle .operation-item svg {
-  fill: currentColor !important;
-  stroke: currentColor !important;
+  fill: var(--crepe-color-outline) !important;
+  stroke: none !important;
+  color: var(--crepe-color-outline) !important;
 }
 
-/* Link popups (edit & preview) */
+.milkdown .milkdown-block-handle .operation-item:hover svg {
+  fill: hsl(var(--foreground)) !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+/* ─── Code block ─────────────────────────────────────────────────────────── */
+.milkdown .milkdown-code-block {
+  background: hsl(var(--card)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  border-radius: var(--radius);
+}
+
+.milkdown .milkdown-code-block .cm-editor,
+.milkdown .milkdown-code-block .cm-gutters {
+  background: transparent !important;
+}
+
+/* ─── Link popup ─────────────────────────────────────────────────────────── */
 .milkdown .milkdown-link-edit,
 .milkdown .milkdown-link-preview {
   z-index: 50 !important;
@@ -344,14 +417,15 @@
 .milkdown .milkdown-link-edit .button svg,
 .milkdown .milkdown-link-preview .button svg,
 .milkdown .milkdown-link-preview .link-icon svg {
-  color: hsl(var(--muted-foreground)) !important;
-  fill: hsl(var(--muted-foreground)) !important;
+  color: var(--crepe-color-outline) !important;
+  fill: var(--crepe-color-outline) !important;
+  stroke: none !important;
 }
 
-/* ProseMirror editing canvas */
+/* ─── ProseMirror editing canvas ─────────────────────────────────────────── */
 .milkdown .ProseMirror {
   min-height: calc(100% - 44px);
-  /* 5.5rem (88px) left padding provides room for 66px block handle (+ and ::) without clipping */
+  /* 5.5rem (88px) left padding provides room for 66px block handle (+ and ⠿) without clipping */
   padding: 2rem 3rem 6rem 5.5rem !important;
   outline: none;
   background: transparent !important;
