@@ -457,7 +457,9 @@ function RootLayoutContent() {
         {/* Top Header */}
         <header
           className={`flex h-14 shrink-0 items-center justify-between border-b bg-background min-w-0 ${
-            isSubjectWorkspace || isCommunities
+            sidebarOffset > 0
+              ? "pl-0 pr-2 sm:pr-4 lg:pr-6 gap-0"
+              : isSubjectWorkspace || isCommunities
               ? "pl-0.5 sm:pl-1 pr-2 sm:pr-4 lg:pr-6 gap-0"
               : "pl-1 sm:pl-2 pr-2 sm:pr-4 lg:pr-6 gap-2 sm:gap-4"
           }`}
